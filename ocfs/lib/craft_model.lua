@@ -4,15 +4,11 @@ local component = require("component")
 local M = {}
 M.ME = component.isAvailable("me_controller") and component.me_controller or nil
 
-local function safe_me(fn, ...)
-  if not M.ME then return nil end
-  local ok, res = pcall(function() return M.ME[fn](...) end)
-  if not ok then return nil end
-  return res
-end
-
 local function _raw_craftables(filter)
-  return safe_me("getCraftables", filter) or {}
+  if not M.ME then return {} end
+  local ok, list = pcall(function() return M.ME.getCraftables(filter) end)
+  if not ok or type(list) ~= "table" then return {} end
+  return list
 end
 
 local function _stackOf(entry)
@@ -38,6 +34,7 @@ end
 function M.get_craftables(query)
   local result = {}
   if not M.ME then return result end
+
   local filter = (query and query ~= "") and { label = query } or nil
   local raw = _raw_craftables(filter)
 
@@ -46,12 +43,13 @@ function M.get_craftables(query)
     local st = _stackOf(entry) or {}
     local label = st.label or st.name or "<?>"
     if _match(label, query) then
+      local name = st.name
       result[#result+1] = {
         entry  = entry,
         label  = label,
-        name   = st.name,
+        name   = name,
         damage = st.damage,
-        mod    = _modFromName(st.name),
+        mod    = _modFromName(name),
       }
     end
   end
@@ -71,8 +69,15 @@ end
 
 function M.get_cpu_summary()
   if not M.ME then return { total=0, busy=0, list={} } end
-  local cpus = safe_me("getCpus") or safe_me("getCraftingCPUs") or {}
-  local list, busy = {}, 0
+  local list = {}
+  local ok, cpus = pcall(function()
+    if M.ME.getCpus then return M.ME.getCpus() end
+    if M.ME.getCraftingCPUs then return M.ME.getCraftingCPUs() end
+    return {}
+  end)
+  if not ok or type(cpus) ~= "table" then cpus = {} end
+
+  local busy = 0
   for i=1,#cpus do
     local c = cpus[i] or {}
     local entry = {
@@ -94,19 +99,21 @@ function M.get_item_info(craft_row)
   local dmg   = craft_row and craft_row.damage
 
   local inNetCount, craftable = 0, false
-  local items = safe_me("getItemsInNetwork", { name = name, damage = dmg })
-  if type(items)=="table" and items[1] then
+  local ok, items = pcall(function() return M.ME.getItemsInNetwork({ name = name, damage = dmg }) end)
+  if ok and type(items)=="table" and items[1] then
     local it = items[1]
-    inNetCount = it.size or 0
+    inNetCount = (it.size or 0)
     craftable  = not not (it.isCraftable or it.is_craftable)
   else
-    local all = safe_me("getItemsInNetwork") or {}
-    for _,it in ipairs(all) do
-      local lbl = (it.label or it.name or ""):lower()
-      if lbl == (label or ""):lower() then
-        inNetCount = it.size or 0
-        craftable  = not not (it.isCraftable or it.is_craftable)
-        break
+    local ok2, all = pcall(function() return M.ME.getItemsInNetwork() end)
+    if ok2 and type(all)=="table" then
+      for _,it in ipairs(all) do
+        local lbl = (it.label or it.name or ""):lower()
+        if lbl == (label or ""):lower() then
+          inNetCount = it.size or 0
+          craftable  = not not (it.isCraftable or it.is_craftable)
+          break
+        end
       end
     end
   end
@@ -120,8 +127,13 @@ function M.get_item_info(craft_row)
 end
 
 function M.get_jobs()
-  local jobs = safe_me("getCraftingJobs") or {}
-  return type(jobs)=="table" and jobs or {}
+  if not M.ME then return {} end
+  local ok, jobs = pcall(function()
+    if M.ME.getCraftingJobs then return M.ME.getCraftingJobs() end
+    return {}
+  end)
+  if not ok or type(jobs)~="table" then return {} end
+  return jobs
 end
 
 function M.cancel_job(id)
@@ -131,7 +143,8 @@ function M.cancel_job(id)
     return false, "cancel not supported"
   end)
   if not ok then return false, res end
-  return res == true, res
+  if res == true then return true end
+  return false, res
 end
 
 return M
