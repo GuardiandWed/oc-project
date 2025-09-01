@@ -6,7 +6,7 @@
 ------------------------------------ CONFIG ------------------------------------
 -- URL должен указывать ИМЕННО на папку ocfs/ в raw:
 -- Пример: "https://raw.githubusercontent.com/<user>/<repo>/refs/heads/main/ocfs/"
-local REPOSITORY = "https://raw.githubusercontent.com/<user>/<repo>/refs/heads/main/ocfs/"
+local REPOSITORY = "https://raw.githubusercontent.com/GuardiandWed/oc-project/refs/heads/main/ocfs/"
 
 -- Если manifest.txt в репозитории отсутствует, используем этот дефолтный список:
 local DEFAULT_FILES = {
