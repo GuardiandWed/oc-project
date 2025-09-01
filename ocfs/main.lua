@@ -6,7 +6,7 @@ local term      = require("term")
 local gpu       = component.isAvailable("gpu") and component.gpu or nil
 local chatBox   = component.isAvailable("chat_box") and component.chat_box or nil
 
-local gui       = require("sgui")
+local gui       = require("ugui")
 local model     = require("craft_model")
 local view      = require("craft_gui")
 

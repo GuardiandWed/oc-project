@@ -1,5 +1,5 @@
 -- /home/craft_gui.lua
-local gui     = require("sgui")
+local gui     = require("ugui")
 local gpu     = require("component").gpu
 local unicode = require("unicode")
 
