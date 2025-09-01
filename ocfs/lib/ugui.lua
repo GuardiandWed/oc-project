@@ -1,70 +1,85 @@
--- ugui.lua — минимальный GUI-слой с &-цветами и рамками
-local component = require("component")
-local gpu = component.gpu
+-- Author: https://github.com/Awl-S
+
+ugui = {}
+local gpu = require("component").gpu
 local unicode = require("unicode")
 
-local M = {}
-
--- палитра под &0..&f (похожа на minecraft)
-local palette = {
-  ["0"]=0x000000, ["1"]=0x0000AA, ["2"]=0x00AA00, ["3"]=0x00AAAA,
-  ["4"]=0xAA0000, ["5"]=0xAA00AA, ["6"]=0xFFAA00, ["7"]=0xAAAAAA,
-  ["8"]=0x555555, ["9"]=0x5555FF, ["a"]=0x55FF55, ["b"]=0x55FFFF,
-  ["c"]=0xFF5555, ["d"]=0xFF55FF, ["e"]=0xFFFF55, ["f"]=0xFFFFFF,
+ugui.colors = {
+    ["0"] = 0x333333,
+    ["1"] = 0x0000ff,
+    ["2"] = 0x00ff00,
+    ["3"] = 0x24b3a7,
+    ["4"] = 0xff0000,
+    ["5"] = 0x8b00ff,
+    ["6"] = 0xffa500,
+    ["7"] = 0xbbbbbb,
+    ["8"] = 0x808080,
+    ["9"] = 0x0000ff,
+    ["a"] = 0x66ff66,
+    ["b"] = 0x00ffff,
+    ["c"] = 0xff6347,
+    ["d"] = 0xff00ff,
+    ["e"] = 0xffff00,
+    ["f"] = 0xffffff,
+    ["g"] = 0x00ff00,
+    ["border"] = 0x525FE1,
 }
 
-M.colors = {
-  border = "9", -- просто используем как код для цвета рамки
-}
-
-local function setColorByCode(code)
-  local col = palette[code]
-  if col then pcall(gpu.setForeground, col) end
-end
-
--- печать строки с &-кодами
-function M.text(x, y, str)
-  if not str then return end
-  local old = { gpu.getForeground() }
-  local i = 1
-  local cx = x
-  while i <= #str do
-    local ch = str:sub(i,i)
-    if ch == "&" and i < #str then
-      local c = str:sub(i+1,i+1)
-      setColorByCode(c)
-      i = i + 2
-    else
-      gpu.set(cx, y, ch)
-      cx = cx + 1
-      i = i + 1
+function ugui.setColor(index)
+    local back = gpu.getForeground()
+    local newColor = ugui.colors[index]
+    if newColor then
+        gpu.setForeground(newColor)
+    elseif index == "r" then
+        gpu.setForeground(back)
     end
-  end
-  pcall(gpu.setForeground, old[1])
 end
 
--- простая шапка
-function M.drawMain(title, borderCode, bgCode)
-  local w,h = gpu.getResolution()
-  local oldF, oldB = gpu.getForeground(), gpu.getBackground()
-  setColorByCode(borderCode or "9")
-  for x=1,w do gpu.set(x,1,"─") end
-  M.text(2,1,title or "")
-  pcall(gpu.setForeground, oldF); pcall(gpu.setBackground, oldB)
+function ugui.text(x, y, text)
+    local n = 0
+    local isColorCode = false
+
+    for i = 1, unicode.len(text) do
+        local char = unicode.sub(text, i, i)
+
+        if char == "&" then
+            isColorCode = true
+        elseif isColorCode then
+            isColorCode = false
+            if ugui.colors[char] then
+                ugui.setColor(char)
+            end
+        else
+            n = n + 1
+            gpu.set(x + n, y, char)
+        end
+    end
 end
 
--- рамка box-drawing + заголовок в [ ]
-function M.drawFrame(x,y,w,h,title,borderCode)
-  local oldF = gpu.getForeground()
-  setColorByCode(borderCode or "9")
-  gpu.set(x, y, "┌"..string.rep("─", w-2).."┐")
-  for i=1,h-2 do gpu.set(x, y+i, "│"..string.rep(" ", w-2).."│") end
-  gpu.set(x, y+h-1, "└"..string.rep("─", w-2).."┘")
-  if title and title ~= "" then
-    local cap = "["..title.."]"
-    M.text(x+2, y, cap)
-  end
-  pcall(gpu.setForeground, oldF)
+function ugui.drawCube(x, y, width, height, color)
+    local topBorder = "╭" .. string.rep("⎯", width - 2) .. "╮"
+    local middleRow = "│" .. string.rep(" ", width - 2) .. "│"
+    local bottomBorder = "╰" .. string.rep("⎯", width - 2) .. "╯" -- ━
+    gpu.setForeground(color)
+    gpu.set(x, y, topBorder)     -- Draw top border
+    for i = 1, height - 2 do
+        gpu.set(x, y + i, middleRow)     -- Draw middle rows
+    end
+    gpu.set(x, y + height - 1, bottomBorder)     -- Draw bottom border
 end
 
-return M
+function ugui.drawMain(nameTable, color, version)
+    local width, height = gpu.getResolution()
+    ugui.drawCube(1, 1, width, height, color)  
+    ugui.text(math.floor((width/2)-unicode.len(nameTable)/2), 1,  nameTable)
+    ugui.text(5, height, "&9[&bAuthor: Stawlie_&9] &bgithub.com/Awl-S/Monitoring-Ala ")
+    vers = "&b[v" .. version .. "]"
+    ugui.text(width-#vers-5, height, vers)
+end
+
+function ugui.drawFrame(x, y, width, height, nameTitle, color)
+    ugui.drawCube(x, y, width, height, color)
+    ugui.text(x+1, y, "[" ..nameTitle .. "]")
+end
+
+return ugui
