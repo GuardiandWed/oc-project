@@ -4,6 +4,7 @@
 
 ------------------------------------ CONFIG ------------------------------------
 local REPOSITORY = "https://raw.githubusercontent.com/GuardiandWed/oc-project/refs/heads/main/ocfs/"
+
 local DEFAULT_FILES = {
   "main.lua",
   "lib/craft_gui.lua",
