@@ -24,17 +24,32 @@ local function _modFromName(name)
   return name:sub(1, i-1)
 end
 
-local function _match(hay, needle)
+local function _match(hay, needle, exact)
   if not needle or needle == "" then return true end
-  hay    = tostring(hay or ""):lower()
-  needle = tostring(needle):lower()
-  return hay:find(needle, 1, true) ~= nil
+  hay    = tostring(hay or "")
+  needle = tostring(needle)
+  if exact then
+    return hay:lower() == needle:lower()
+  else
+    return hay:lower():find(needle:lower(), 1, true) ~= nil
+  end
 end
 
-function M.get_craftables(query)
+local function _getItemRecord(name, damage)
+  if not M.ME then return nil end
+  local ok, items = pcall(function() return M.ME.getItemsInNetwork({ name = name, damage = damage }) end)
+  if ok and type(items)=="table" and items[1] then
+    return items[1]
+  end
+  return nil
+end
+
+function M.get_craftables(query, opts)
+  opts = opts or {}
   local result = {}
   if not M.ME then return result end
 
+  -- AE2 умеет «label = query», но мы всё равно фильтруем сами для подстроки/точного
   local filter = (query and query ~= "") and { label = query } or nil
   local raw = _raw_craftables(filter)
 
@@ -42,16 +57,28 @@ function M.get_craftables(query)
     local entry = raw[i]
     local st = _stackOf(entry) or {}
     local label = st.label or st.name or "<?>"
-    if _match(label, query) then
-      local name = st.name
+    local name  = st.name
+    local dmg   = st.damage
+
+    if _match(label, query, opts.exact) then
+      local stored, craftable
+      if opts.onlyStored or opts.onlyCraftable then
+        local rec = _getItemRecord(name, dmg)
+        stored    = (rec and rec.size) or 0
+        craftable = not not (rec and (rec.isCraftable or rec.is_craftable))
+        if opts.onlyStored and stored <= 0 then goto continue end
+        if opts.onlyCraftable and not craftable then goto continue end
+      end
+
       result[#result+1] = {
         entry  = entry,
         label  = label,
         name   = name,
-        damage = st.damage,
+        damage = dmg,
         mod    = _modFromName(name),
       }
     end
+    ::continue::
   end
   return result
 end
@@ -99,23 +126,10 @@ function M.get_item_info(craft_row)
   local dmg   = craft_row and craft_row.damage
 
   local inNetCount, craftable = 0, false
-  local ok, items = pcall(function() return M.ME.getItemsInNetwork({ name = name, damage = dmg }) end)
-  if ok and type(items)=="table" and items[1] then
-    local it = items[1]
-    inNetCount = (it.size or 0)
-    craftable  = not not (it.isCraftable or it.is_craftable)
-  else
-    local ok2, all = pcall(function() return M.ME.getItemsInNetwork() end)
-    if ok2 and type(all)=="table" then
-      for _,it in ipairs(all) do
-        local lbl = (it.label or it.name or ""):lower()
-        if lbl == (label or ""):lower() then
-          inNetCount = it.size or 0
-          craftable  = not not (it.isCraftable or it.is_craftable)
-          break
-        end
-      end
-    end
+  local rec = _getItemRecord(name, dmg)
+  if rec then
+    inNetCount = rec.size or 0
+    craftable  = not not (rec.isCraftable or rec.is_craftable)
   end
 
   return {
@@ -126,14 +140,33 @@ function M.get_item_info(craft_row)
   }
 end
 
+local function _arr(t)
+  -- нормализуем jobs в массив
+  if type(t) ~= "table" then return {} end
+  local out, n = {}, 0
+  for i,v in ipairs(t) do out[#out+1]=v; n=n+1 end
+  -- если ipairs дал 0, попробуем по парам (случай map-like)
+  if n==0 then for _,v in pairs(t) do out[#out+1]=v end end
+  return out
+end
+
 function M.get_jobs()
   if not M.ME then return {} end
   local ok, jobs = pcall(function()
     if M.ME.getCraftingJobs then return M.ME.getCraftingJobs() end
     return {}
   end)
-  if not ok or type(jobs)~="table" then return {} end
-  return jobs
+  if not ok then return {} end
+  jobs = _arr(jobs)
+
+  -- приведём к унифицированному виду для GUI
+  local norm = {}
+  for i, j in ipairs(jobs) do
+    local id    = j.id or j.ID or j.JobID or i
+    local label = j.label or j.name or (type(j)=="table" and j[1]) or ("Job "..i)
+    norm[#norm+1] = { id = id, label = tostring(label) }
+  end
+  return norm
 end
 
 function M.cancel_job(id)

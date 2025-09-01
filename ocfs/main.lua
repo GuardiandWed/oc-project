@@ -23,15 +23,23 @@ end
 view.draw_shell("&d[Панель ME-крафта]")
 
 local function reload_list()
-  view.craftables = model.get_craftables(view.searchText)
+  -- передаём фильтры в модель
+  local opts = {
+    exact         = view.filters.exact,
+    onlyCraftable = view.filters.onlyCraftable,
+    onlyStored    = view.filters.onlyStored,
+  }
+  view.craftables = model.get_craftables(view.searchText, opts)
   local cpu = model.get_cpu_summary()
   view.render_list(cpu)
 end
+
 local function redraw_modals()
   view.render_dialog()
   view.render_jobs()
   view.render_mods()
 end
+
 local function draw_info_for(row)
   local info = model.get_item_info(row or {})
   view.render_info(info)
@@ -94,12 +102,10 @@ while true do
       view.render_mods()
 
     elseif action == "mods_cancel" then
-      -- просто закрыли
       view.draw_shell("&d[Панель ME-крафта]")
       reload_list()
 
     elseif action == "mods_apply" then
-      -- применяем настройки
       view.close_mods()
       view.draw_shell("&d[Панель ME-крафта]")
       reload_list()
