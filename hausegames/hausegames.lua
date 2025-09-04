@@ -13,8 +13,8 @@ local rows, cols    = 2,3
 local cardW, cardH  = 26,11
 local padX, padY    = 10,8
 
--- поле игр
-local gridX, gridY  = 3,6   -- чуть выше заголовка уменьшенного
+-- поле игр (поднято из-за более компактной шапки)
+local gridX, gridY  = 3,4
 local gridW         = cols*cardW + (cols-1)*padX + 10
 local gridH         = rows*cardH + (rows-1)*padY + 10
 
@@ -37,8 +37,8 @@ local function draw_card(x,y,w,h, g)
   gui.text(x+3, y+5, "&7Сыграно: &f"..played)
   gui.button(x+4, y+h-4, w-8, 3, "Запустить", {
     bg = core.theme.primary, fg = 0x000000,
-    parentBg = core.theme.card,   -- важно для красивых скруглений кнопки
-    radius   = 2,
+    parentBg = core.theme.card,
+    radius   = 1,
     onClick  = function() require("gamesboot").run(name) end
   })
 end
@@ -77,11 +77,11 @@ end
 local function draw_footer()
   local y = H - 4
   gui.button(4,  y, 30, 3, "Рестарт программы", {
-    bg = core.theme.primary, fg = 0x000000, parentBg = core.theme.bg, radius=2,
+    bg = core.theme.primary, fg = 0x000000, parentBg = core.theme.bg, radius=1,
     onClick = restart_program
   })
   gui.button(38, y, 30, 3, "Выход из программы", {
-    bg = core.theme.danger, fg = 0x000000, parentBg = core.theme.bg, radius=2,
+    bg = core.theme.danger, fg = 0x000000, parentBg = core.theme.bg, radius=1,
     onClick = function() if _G.__hg_bot then pcall(_G.__hg_bot.stop, _G.__hg_bot) end; core.shutdown() end
   })
 end

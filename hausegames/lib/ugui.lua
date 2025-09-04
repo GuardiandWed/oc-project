@@ -36,7 +36,7 @@ function M.drawFrame(x,y,w,h,title)
   Core.card_shadow(x,y,w,h, Core.theme.panelBg, Core.theme.border, nil, title)
 end
 
--- карточки игр — подложка + внутренняя вставка (центр, скругления, точечная рамка)
+-- карточки игр
 function M.card(x,y,w,h,title) Core.card(x,y,w,h,title) end
 
 -- делегаты
