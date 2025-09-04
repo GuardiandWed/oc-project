@@ -9,7 +9,7 @@ local DEFAULT_FILES = {
   "lib/gamesboot.lua",
   "lib/ugui.lua",
   "lib/ugui_core.lua",
-  "games/games_list.lua",
+  "games/games_list.json",
   "data/boot_log.txt"
 }
 local APP_TITLE = "HauseGames — Updater"
