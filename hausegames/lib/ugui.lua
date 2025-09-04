@@ -24,9 +24,8 @@ local function put_colored(x,y,str)
 end
 function M.text(x,y,str) put_colored(x,y,str) end
 
--- уменьшенный заголовок
 function M.drawMain()
-  Core.bigtitle_center_small("HauseMasters", 5, M.theme.titleGray, M.theme.titleYellow, 1)
+  Core.bigtitle_center("HauseMasters", 5, M.theme.titleGray, M.theme.titleYellow, 1)
 end
 
 function M.bigGrid(x,y,w,h) Core.big_grid_frame(x,y,w,h) end
@@ -36,7 +35,7 @@ function M.drawFrame(x,y,w,h,title)
   Core.card_shadow(x,y,w,h, Core.theme.panelBg, Core.theme.border, nil, title)
 end
 
--- карточки игр
+-- карточки игр — без рамки, только мягкая тень
 function M.card(x,y,w,h,title) Core.card(x,y,w,h,title) end
 
 -- делегаты
@@ -44,14 +43,7 @@ function M.clear(bg) Core.clear(bg or Core.theme.bg) end
 function M.flush() Core.flush() end
 function M.button(x,y,w,h,label,opts)
   opts=opts or {}
-  return Core.button(
-    x,y,w,h,
-    label or "OK",
-    opts.bg or Core.theme.primary,
-    opts.fg or 0x000000,
-    opts.onClick,
-    opts
-  )
+  return Core.button(x,y,w,h, label or "OK", opts.bg or Core.theme.primary, opts.fg or 0x000000, opts.onClick)
 end
 function M.log(x,y,w,h,lines) Core.logpane(x,y,w,h, lines or {}) end
 function M.inBounds(ctrl, cx, cy) return Core.inBounds(ctrl, cx, cy) end
