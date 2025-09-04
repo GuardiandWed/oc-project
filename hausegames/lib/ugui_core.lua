@@ -1,7 +1,6 @@
--- /lib/ugui_core.lua — reactor/minecraft стиль (v3.1)
+-- /lib/ugui_core.lua — reactor/minecraft стиль (v3)
 
-local gpu     = require("component").gpu
-local unicode = require("unicode")
+local gpu = require("component").gpu
 local core = {}
 
 -- палитра
@@ -19,18 +18,18 @@ core.theme = {
   muted    = 0xBFC4CA,
 
   -- акценты
-  border   = 0x6D77FF,       -- тонкая синяя рамка для правых панелей
+  border   = 0x6D77FF,       -- тонкая синяя рамка для малых панелей
   primary  = 0x12D4C6,
   danger   = 0xFF7C8F,
 
   -- тени/контуры
-  shadow1  = 0x25272A,       -- мягкая 1px тень (внутренняя)
-  outline  = 0x0E0F11,       -- резерв (не используется на кнопках/карточках)
+  shadow1  = 0x25272A,       -- мягкая 1px тень
+  outline  = 0x0E0F11,       -- контур кнопки
 
   -- заголовок
   titleGray   = 0xD0D0D0,
   titleYellow = 0xF0B915,
-  titleCheek  = 0x8E8E8E,
+  titleCheek  = 0x8E8E8E,    -- «щёчки» под заголовком
 }
 
 local W,H = 80,25
@@ -64,7 +63,7 @@ function core.rect(x,y,w,h,bg,fg,char)
   for i=0,h-1 do gpu.fill(x, y+i, w, 1, char or " ") end
 end
 
--- тонкая рамка (для правых панелей)
+-- тонкая рамка (для карточек/панелей)
 function core.frame(x,y,w,h,col)
   local prev = {gpu.getForeground()}
   gpu.setForeground(col or core.theme.border)
@@ -79,55 +78,30 @@ function core.frame(x,y,w,h,col)
   gpu.setForeground(table.unpack(prev))
 end
 
--- большой квадратный двухцветный фрейм
+-- большой квадратный двухцветный фрейм (2 слоя по 1px) + фон
 function core.big_grid_frame(x,y,w,h)
-  core.rect(x,   y,      w,   1, core.theme.gridEdgeDark)
-  core.rect(x,   y+h-1,  w,   1, core.theme.gridEdgeDark)
-  core.rect(x,   y,      1,   h, core.theme.gridEdgeDark)
-  core.rect(x+w-1,y,     1,   h, core.theme.gridEdgeDark)
-
-  core.rect(x+1, y+1,    w-2, 1, core.theme.gridEdgeLight)
-  core.rect(x+1, y+h-2,  w-2, 1, core.theme.gridEdgeLight)
-  core.rect(x+1, y+1,    1,   h-2, core.theme.gridEdgeLight)
-  core.rect(x+w-2,y+1,   1,   h-2, core.theme.gridEdgeLight)
-
-  core.rect(x+2, y+2,    w-4, h-4, core.theme.gridBg)
+  -- внешний слой
+  core.rect(x,   y,   w,   1, core.theme.gridEdgeDark)
+  core.rect(x,   y+h-1, w, 1, core.theme.gridEdgeDark)
+  core.rect(x,   y,   1,   h, core.theme.gridEdgeDark)
+  core.rect(x+w-1,y,  1,   h, core.theme.gridEdgeDark)
+  -- внутренний слой
+  core.rect(x+1, y+1, w-2, 1, core.theme.gridEdgeLight)
+  core.rect(x+1, y+h-2, w-2,1, core.theme.gridEdgeLight)
+  core.rect(x+1, y+1, 1,   h-2, core.theme.gridEdgeLight)
+  core.rect(x+w-2,y+1,1,   h-2, core.theme.gridEdgeLight)
+  -- заливка
+  core.rect(x+2, y+2, w-4, h-4, core.theme.gridBg)
 end
 
--- мягкая внутренняя тень: 1px снизу и справа, НЕ выходит за границы
-local function inner_shadow(x,y,w,h)
-  if w>=3 then core.rect(x+1, y+h-1, w-2, 1, core.theme.shadow1) end  -- низ
-  if h>=3 then core.rect(x+w-1, y+1, 1,   h-2, core.theme.shadow1) end -- правая грань
-end
-
--- «пиксельные» скругления через срез углов
-local function cut_corners(x,y,w,h,bg)
-  if w>=4 and h>=3 then
-    setbg(bg)
-    gpu.fill(x,     y,     1, 1, " ")
-    gpu.fill(x+w-1, y,     1, 1, " ")
-    gpu.fill(x,     y+h-1, 1, 1, " ")
-    gpu.fill(x+w-1, y+h-1, 1, 1, " ")
-  end
-end
-
--- правые панели: фон + рамка + внутренняя маленькая тень
+-- карточки/панели с мягкой 1px тенью
 function core.card_shadow(x,y,w,h,bg,border,_,title)
-  inner_shadow(x,y,w,h)
-  core.rect(x, y, w, h, bg or core.theme.panelBg)
+  core.rect(x+1,y+1,w,h, core.theme.shadow1)
+  core.rect(x,  y,  w,h, bg or core.theme.card)
   core.frame(x,y,w,h, border or core.theme.border)
   if title and title~="" then core.text(x+2,y,"["..title.."]", core.theme.text) end
 end
-
--- карточка игры: НИКАКОЙ синей рамки, скругления и маленькая тень
-function core.card(x,y,w,h,title)
-  inner_shadow(x,y,w,h)
-  core.rect(x, y, w, h, core.theme.card)
-  cut_corners(x,y,w,h, core.theme.card)
-  if title and title~="" then core.text(x+2,y,"["..title.."]", core.theme.text) end
-end
-
--- лог-панель справа
+function core.card(x,y,w,h,title) core.card_shadow(x,y,w,h, core.theme.card, core.theme.border, nil, title) end
 function core.logpane(x,y,w,h,lines)
   core.card_shadow(x,y,w,h, core.theme.panelBg, core.theme.border, nil)
   if not lines then return end
@@ -140,44 +114,43 @@ function core.logpane(x,y,w,h,lines)
   end
 end
 
--- кнопка: без обводки; скругления + внутренняя маленькая тень
+-- кнопки-«пилюли» (майнкрафт-скругления + совпадающий контур)
 local function inside(mx,my,b) return mx>=b.x and mx<=b.x+b.w-1 and my>=b.y and my<=b.y+b.h-1 end
 function core.button(x,y,w,h,label,bg,fg,onClick)
   h = math.max(3, h or 3)
   label = label or "OK"; bg = bg or core.theme.primary; fg = fg or 0x000000
 
-  -- маленькая внутренняя тень
-  inner_shadow(x,y,w,h)
+  core.rect(x+1, y+1, w, h, core.theme.shadow1)  -- 1px тень
+  core.rect(x,   y,   w, h, bg)                  -- тело
 
-  -- тело
-  core.rect(x, y, w, h, bg)
-  cut_corners(x,y,w,h,bg)
-
-  -- текст по центру с учётом Unicode
-  local lbl = tostring(label)
-  local ulen = unicode.len(lbl)
-  local maxw = math.max(0, w-2)
-  if ulen > maxw then
-    -- обрезаем по символам, добавляя …
-    local cut = maxw-1
-    if cut < 0 then cut = 0 end
-    lbl = unicode.sub(lbl, 1, cut) .. (maxw>0 and "…" or "")
-    ulen = unicode.len(lbl)
+  -- «пиксельные» скругления: срезаем углы
+  if w>=4 then
+    setbg(bg)
+    gpu.fill(x,     y,     1, 1, " ")
+    gpu.fill(x+w-1, y,     1, 1, " ")
+    gpu.fill(x,     y+h-1, 1, 1, " ")
+    gpu.fill(x+w-1, y+h-1, 1, 1, " ")
   end
-  local tx = x + math.floor((w - ulen)/2)
-  local ty = y + math.floor((h-1)/2)
+
+  -- контур (совпадает с краями тела)
+  core.frame(x, y, w, h, core.theme.outline)
+
+  -- текст по центру + усечение, чтобы не вылезал
+  local lbl = label
+  if #lbl > w-2 then lbl = lbl:sub(1, w-2) end
+  local tx = x + math.floor((w - #lbl)/2)
+  local ty = y + math.floor(h/2)
   core.text(tx, ty, lbl, fg)
 
   local b = {x=x,y=y,w=w,h=h,onClick=onClick}; table.insert(buttons,b); return b
 end
-
 function core.inBounds(ctrl,x,y) return ctrl and inside(x,y,ctrl) or false end
 function core.dispatch_click(x,y)
   for _,b in ipairs(buttons) do if inside(x,y,b) then if b.onClick then pcall(b.onClick) end; return true end end
   return false
 end
 
--- заголовок 4×5
+-- компактный «пиксельный» заголовок 4×5, без подложки
 local FONT4 = {
   ["A"]={" ## ","#  #","####","#  #","#  #"},
   ["E"]={"####","#   ","### ","#   ","####"},
@@ -208,9 +181,9 @@ function core.bigtitle_center(text, splitN, colLeft, colRight, y)
   local x0     = math.max(2, math.floor((scrW - totW)/2))
   local yy     = (y or 1)
 
-  -- «щёчки» из двух ступеней
-  core.rect(x0-10,     yy+2, 8, 1, core.theme.titleCheek)
-  core.rect(x0-8,      yy+3, 6, 1, core.theme.titleCheek)
+  -- маленькие «щёчки» (ступеньки) слева/справа
+  core.rect(x0-10, yy+2, 8, 1, core.theme.titleCheek)
+  core.rect(x0-8,  yy+3, 6, 1, core.theme.titleCheek)
   core.rect(x0+totW+2, yy+2, 8, 1, core.theme.titleCheek)
   core.rect(x0+totW+2, yy+3, 6, 1, core.theme.titleCheek)
 
