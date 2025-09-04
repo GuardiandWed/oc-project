@@ -120,17 +120,14 @@ local function buildCaches()
   table.sort(modsArr)
   log("Найдено модов: "..tostring(#modsArr), COL_OK)
 
-  -- индекс "name:damage" -> label из сети ME
   local labelByKey = {}
   for i = 1, total1 do
     local it = items[i] or {}
-    local nm  = it.name
-    local dmg = it.damage or 0
-    local lbl = it.label
-    if nm and lbl then
-      labelByKey[nm .. ":" .. tostring(dmg)] = lbl
+    if it.name and it.label then
+      labelByKey[it.name .. ":" .. tostring(it.damage or 0)] = it.label
     end
   end
+
 
 
     -- 2) Все крафтабельные шаблоны (через список предметов, без лимита 50)
@@ -177,6 +174,7 @@ local function buildCaches()
       local p = name:find(":"); if p and p>1 then mod = name:sub(1,p-1) end
     end
 
+    -- helper
     local function goodLabel(lbl)
       if not lbl or lbl=="" or lbl=="<?>" then return false end
       if lbl=="tile.null.name" or lbl=="item.null.name" then return false end
@@ -185,8 +183,7 @@ local function buildCaches()
       return true
     end
 
-    -- ...после вычисления name,label,dmg,mod:
-    if goodLabel(label) then
+    if entry and goodLabel(label) then
       local row = { entry=entry, label=label, name=name, damage=dmg, mod=mod }
       craftCache.rows[#craftCache.rows+1] = row
       local bucket = craftCache.byMod[mod]; if not bucket then bucket={} ; craftCache.byMod[mod]=bucket end

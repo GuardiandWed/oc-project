@@ -129,26 +129,42 @@ function M.get_craftables(query, opts)
   return result
 end
 
+local function _resolve_entry(name, damage)
+  if not M.ME or not name then return nil end
+  -- 1) прямой фильтр
+  local ok1, list = pcall(function() return M.ME.getCraftables({ name=name, damage=damage }) end)
+  if ok1 and type(list)=="table" and list[1] then return list[1] end
+  -- 2) полный перебор (редкий кейс, но помогает при несовпадении damage/NBT)
+  local ok2, all = pcall(function() return M.ME.getCraftables() end)
+  if ok2 and type(all)=="table" then
+    for i=1,#all do
+      local e = all[i]
+      local okS, st = pcall(e.getItemStack, e)
+      if okS and st and st.name==name and (damage==nil or st.damage==damage) then
+        return e
+      end
+    end
+  end
+  return nil
+end
+
 function M.request_craft(craft_row, qty)
   qty = tonumber(qty) or 1
   if qty < 1 then qty = 1 end
   if not craft_row then return false, "no craft row" end
 
   local entry = craft_row.entry
-  if (not entry or type(entry)~="table" or not entry.request) and M.ME then
-    local okE, entries = pcall(function()
-      return M.ME.getCraftables({ name = craft_row.name, damage = craft_row.damage })
-    end)
-    if okE and type(entries)=="table" then entry = entries[1] end
+  if not (entry and entry.request) then
+    entry = _resolve_entry(craft_row.name, craft_row.damage)
   end
-  if not entry or not entry.request then
+  if not (entry and entry.request) then
     return false, "craft entry not found"
   end
-
   local ok, res = pcall(function() return entry.request(qty) end)
   if not ok then return false, tostring(res) end
   return true, res
 end
+
 
 
 function M.get_cpu_summary()
@@ -234,6 +250,44 @@ function M.cancel_job(id)
 end
 
 
+local fs  = require("filesystem")
+local ser = require("serialization")
+
+function M.save_cache(path)
+  path = path or "/home/data/craft_cache.lua"
+  local dir = path:match("^(.*)/[^/]+$")
+  if dir and not fs.exists(dir) then fs.makeDirectory(dir) end
+  local slim = {}
+  for i=1,#(M.craftCache.rows or {}) do
+    local r = M.craftCache.rows[i]
+    slim[#slim+1] = { name=r.name, damage=r.damage, label=r.label, mod=r.mod }
+  end
+  local f = io.open(path, "w")
+  if not f then return false, "cannot open file" end
+  f:write(ser.serialize({ rows=slim }))
+  f:close()
+  return true
+end
+
+function M.load_cache(path)
+  path = path or "/home/data/craft_cache.lua"
+  if not fs.exists(path) then return false, "no file" end
+  local f = io.open(path, "r"); if not f then return false, "cannot open" end
+  local s = f:read("*a"); f:close()
+  local ok, t = pcall(ser.unserialize, s)
+  if not ok or type(t)~="table" then return false, "bad format" end
+  M.craftCache.rows, M.craftCache.byMod = {}, {}
+  for _,r in ipairs(t.rows or {}) do
+    local mod = r.mod or "unknown"
+    local row = { entry=nil, label=r.label, name=r.name, damage=r.damage, mod=mod }
+    -- ленивое восстановление entry при запуске крафта (_resolve_entry)
+    M.craftCache.rows[#M.craftCache.rows+1] = row
+    local b = M.craftCache.byMod[mod]; if not b then b={} ; M.craftCache.byMod[mod]=b end
+    b[#b+1] = row
+  end
+  M.craftCache.built = true
+  return true
+end
 
 
 return M

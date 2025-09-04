@@ -18,6 +18,8 @@ G.craftables   = {}
 G.rowMap       = {}
 G.focusSearch  = false
 
+G.listPage = 1
+
 -- моды (получаем извне)
 G.allMods = {}
 
@@ -38,6 +40,9 @@ G.modsDialog = {
 -- верхние кнопки
 G.btnStop  = { x = 116-8,  y = 2, w=8,  h=1, label = "[Стоп]" }
 G.btnJobs  = { x = 116-18, y = 2, w=10, h=1, label = "[Задания]" }
+
+G.btnReload = { x = 4, y = G.bounds.y + G.bounds.h + 1, w = 14, h = 1, label = "&b[Обновить кеш]" }
+
 
 -- модалка крафта
 G.dialog     = { visible=false, item=nil, qty="1", okBtn=nil, cancelBtn=nil, inputBox=nil }
@@ -119,6 +124,9 @@ function G.draw_shell(title)
 
   gui.drawFrame(G.listBounds.x-2,  G.listBounds.y-2,  G.listBounds.w+4,  G.listBounds.h+4,  "Доступно к крафту", gui.colors["border"])
   gui.drawFrame(G.infoBounds.x-2,  G.infoBounds.y-2,  G.infoBounds.w+4,  G.infoBounds.h+4,  "Информация",        gui.colors["border"])
+  gui.text(G.btnReload.x, G.btnReload.y, G.btnReload.label)
+  G.btnReload.w = textWidth(G.btnReload.label)
+
 end
 
 -- список
@@ -128,13 +136,29 @@ function G.render_list(cpuSummary)
   G.rowMap = {}
 
   local src = G.craftables or {}
-  local shown = math.min(#src, h)
-  for i = 1, shown do
-    local line = src[i].label or "<?>"
+  local per = h
+  local pages = math.max(1, math.ceil(#src / per))
+  if G.listPage > pages then G.listPage = pages end
+  if G.listPage < 1 then G.listPage = 1 end
+  local page = G.listPage
+  local start = (page-1)*per + 1
+  local finish = math.min(#src, start + per - 1)
+
+  -- шапка навигации
+  local nav = string.format("&7Стр:&f %d/%d  &8[<]  [>]", page, pages)
+  clearRect(x, y-1, w, 1)
+  gui.text(x, y-1, nav)
+  G.listPrev = { x = x + 12, y = y-1, w = 3, h = 1 }
+  G.listNext = { x = x + 17, y = y-1, w = 3, h = 1 }
+
+  for i=start,finish do
+    local row = src[i]
+    local line = row.label or "<?>"
     local maxChars = w - 2
     line = ucut(line, maxChars)
-    gui.text(x, y + (i-1), "&f" .. line)
-    G.rowMap[y + (i-1)] = src[i]
+    local yy = y + (i-start)
+    gui.text(x, yy, "&f" .. line)
+    G.rowMap[yy] = row
   end
 
   clearRect(x, y+h, w, 1)
@@ -347,6 +371,10 @@ function G.handle_touch(screen, tx, ty)
   if pointIn(tx,ty,G.btnJobs) then return "open_jobs" end
   if pointIn(tx,ty,G.btnStop) then return "open_jobs" end
 
+  -- нижние кнопки
+  if pointIn(tx,ty,G.btnReload) then return "reload_cache" end
+
+
   -- модалка заданий
   if G.jobsDialog.visible then
     if pointIn(tx,ty,G.jobsDialog.closeBtn) then
@@ -432,6 +460,10 @@ function G.handle_touch(screen, tx, ty)
   end
 
   -- список
+
+  if G.listPrev and pointIn(tx,ty,G.listPrev) then G.listPage = math.max(1, G.listPage-1); return "search_change" end
+  if G.listNext and pointIn(tx,ty,G.listNext) then G.listPage = G.listPage+1; return "search_change" end
+
   if tx >= G.listBounds.x and tx < G.listBounds.x + G.listBounds.w and
      ty >= G.listBounds.y and ty < G.listBounds.y + G.listBounds.h then
     local row = G.rowMap[ty]
@@ -504,7 +536,15 @@ function G.handle_key_down(ch, code)
     end
   end
 
+  if not G.focusSearch and not G.dialog.visible and not G.modsDialog.visible and not G.jobsDialog.visible then
+    if code == 203 then G.listPage = math.max(1, G.listPage-1); return "search_change" end
+    if code == 205 then G.listPage = G.listPage+1; return "search_change" end
+  end
+
+
   return nil
 end
+
+function G.reset_list_page() G.listPage = 1 end
 
 return G

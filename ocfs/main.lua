@@ -14,6 +14,9 @@ local view      = require("craft_gui")
 local model     = require("craft_model")
 local boot      = require("craft_boot")   -- НОВЫЙ: экран предзагрузки кеша
 
+pcall(function() model.load_cache("/home/data/craft_cache.lua") end)
+
+
 local function say(msg)
   if chatBox then pcall(function() chatBox.say(msg) end) end
 end
@@ -40,8 +43,8 @@ local ok, mods, craftCache = boot.run("ME Cache Builder")
 if ok then
   model.set_all_mods(mods or {})
   model.set_craft_cache(craftCache or {})
+  pcall(function() model.save_cache("/home/data/craft_cache.lua") end)
 else
-  -- даже если не получилось, продолжим с пустым кешем (GUI всё равно поднимется)
   model.set_all_mods({})
   model.set_craft_cache({})
 end
@@ -54,6 +57,7 @@ local function reload_list()
   local modSet = view.get_selected_mods_set()  -- nil = все, {} = ничего
   local search = view.searchText
   view.craftables = model.get_craftables(search, { modSet = modSet })
+  view.reset_list_page()
   local cpu = model.get_cpu_summary()
   view.render_list(cpu)
 end
@@ -102,18 +106,18 @@ while true do
       local ok2, err = model.request_craft(item, qty)
       if ok2 then
         say("§aЗапрошен крафт: §e" .. tostring(item.label or "<?>") .. " §7x§b" .. tostring(qty))
+        local info = model.get_item_info(item); info.status = "запрошен x"..qty
         view.close_dialog()
         view.draw_shell("&d[Панель ME-крафта]")
         reload_list()
-        local info = model.get_item_info(item); info.status = "запрошен x"..qty
         view.render_info(info)
       else
         say("§cОшибка запуска крафта: §7" .. tostring(err))
-        -- покажем ошибку справа
         local info = model.get_item_info(item); info.status = "ошибка: "..tostring(err)
         view.render_info(info)
         view.close_dialog()
       end
+
 
 
     elseif action == "open_jobs" then
@@ -195,9 +199,21 @@ while true do
         view.open_mods()
         view.render_mods()
       end
+
+    elseif action == "reload_cache" then
+      view.open_loader("Перестройка кеша…"); view.update_loader(1,1,""); view.render_loader()
+      local okR, mods2, cache2 = boot.run("ME Cache Builder")
+      if okR then
+        model.set_all_mods(mods2 or {}); model.set_craft_cache(cache2 or {})
+        pcall(function() model.save_cache("/home/data/craft_cache.lua") end)
+      end
+      view.close_loader()
+      view.draw_shell("&d[Панель ME-крафта]"); reload_list(); draw_info_for(nil)
+
     end
 
   elseif ev == "interrupted" then
     break
   end
+
 end
