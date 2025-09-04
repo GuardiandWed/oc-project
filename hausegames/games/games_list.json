@@ -1,0 +1,8 @@
+[
+  { "name": "Snake",    "created": "2025-08-31", "played_seconds": 0 },
+  { "name": "Tetris",   "created": "2025-08-25", "played_seconds": 8040 },
+  { "name": "2048",     "created": "2025-08-12", "played_seconds": 2820 },
+  { "name": "Pong",     "created": "2025-07-08", "played_seconds": 3900 },
+  { "name": "Mines",    "created": "2025-06-21", "played_seconds": 0 },
+  { "name": "Breakout", "created": "2025-06-01", "played_seconds": 12780 }
+]
