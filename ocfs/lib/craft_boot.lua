@@ -150,26 +150,30 @@ local function buildCaches()
   local total2 = #craftableList
   for i = 1, total2 do
     local f = craftableList[i]
-    -- получаем «entry» для запроса крафта по имени/дамагe
-    local okE, entries = pcall(function() return ME.getCraftables({ name=f.name, damage=f.damage }) end)
-    local entry = (okE and type(entries)=="table") and entries[1] or nil
+    local entry
+    do
+      local ok1, t1 = pcall(function() return ME.getCraftables({ name=f.name, damage=f.damage }) end)
+      if ok1 and type(t1)=="table" and t1[1] then entry = t1[1] end
+      if not entry then
+        local ok2, t2 = pcall(function() return ME.getCraftables({ name=f.name }) end)
+        if ok2 and type(t2)=="table" and t2[1] then entry = t2[1] end
+      end
+    end
 
-    -- вытянем stack для label/mod (аккуратно, метод бывает тонкий)
+    -- попытаемся получить stack, чтобы узнать mod/label
     local st = {}
     if entry and entry.getItemStack then
       local okS, stack = pcall(entry.getItemStack, entry)
       if okS and type(stack)=="table" then st = stack end
     end
-    -- если не получилось через entry, используем данные из сети
-    st.name   = st.name   or f.name
-    st.damage = st.damage or f.damage
 
-    local key   = (st.name or f.name or "") .. ":" .. tostring(st.damage or f.damage or 0)
-    local label = labelByKey[key] or st.label or st.name or "<?>"
+    local name  = st.name   or f.name
+    local dmg   = st.damage or f.damage
+    local key   = (name or "") .. ":" .. tostring(dmg or 0)
+    local label = labelByKey[key] or st.label or name or "<?>"
 
-    local name = st.name
-    local dmg   = st.damage
-    local mod   = "unknown"
+    -- вычислим мод из name
+    local mod = "unknown"
     if type(name)=="string" then
       local p = name:find(":"); if p and p>1 then mod = name:sub(1,p-1) end
     end
@@ -183,7 +187,8 @@ local function buildCaches()
       return true
     end
 
-    if entry and goodLabel(label) then
+    -- в кеш кладём ТОЛЬКО с нормальным видимым названием; entry может быть nil (потом восстановим при запуске)
+    if goodLabel(label) then
       local row = { entry=entry, label=label, name=name, damage=dmg, mod=mod }
       craftCache.rows[#craftCache.rows+1] = row
       local bucket = craftCache.byMod[mod]; if not bucket then bucket={} ; craftCache.byMod[mod]=bucket end

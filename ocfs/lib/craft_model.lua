@@ -129,19 +129,34 @@ function M.get_craftables(query, opts)
   return result
 end
 
-local function _resolve_entry(name, damage)
+local function _resolve_entry(name, damage, label)
   if not M.ME or not name then return nil end
-  -- 1) прямой фильтр
-  local ok1, list = pcall(function() return M.ME.getCraftables({ name=name, damage=damage }) end)
-  if ok1 and type(list)=="table" and list[1] then return list[1] end
-  -- 2) полный перебор (редкий кейс, но помогает при несовпадении damage/NBT)
-  local ok2, all = pcall(function() return M.ME.getCraftables() end)
-  if ok2 and type(all)=="table" then
+
+  -- 1) exact name+damage
+  local ok1, l1 = pcall(function() return M.ME.getCraftables({ name=name, damage=damage }) end)
+  if ok1 and type(l1)=="table" and l1[1] then return l1[1] end
+
+  -- 2) name only (часто рецепты wildcard по метаданным)
+  local ok2, l2 = pcall(function() return M.ME.getCraftables({ name=name }) end)
+  if ok2 and type(l2)=="table" and l2[1] then return l2[1] end
+
+  -- 3) label (если интеграция поддерживает)
+  if label then
+    local ok3, l3 = pcall(function() return M.ME.getCraftables({ label=label }) end)
+    if ok3 and type(l3)=="table" and l3[1] then return l3[1] end
+  end
+
+  -- 4) полный перебор (дорого, но надёжно)
+  local ok4, all = pcall(function() return M.ME.getCraftables() end)
+  if ok4 and type(all)=="table" then
     for i=1,#all do
       local e = all[i]
       local okS, st = pcall(e.getItemStack, e)
-      if okS and st and st.name==name and (damage==nil or st.damage==damage) then
-        return e
+      if okS and st then
+        if st.name == name then
+          if (damage == nil) or (st.damage == damage) then return e end
+        end
+        if label and st.label == label then return e end
       end
     end
   end
@@ -155,15 +170,17 @@ function M.request_craft(craft_row, qty)
 
   local entry = craft_row.entry
   if not (entry and entry.request) then
-    entry = _resolve_entry(craft_row.name, craft_row.damage)
+    entry = _resolve_entry(craft_row.name, craft_row.damage, craft_row.label)
   end
   if not (entry and entry.request) then
     return false, "craft entry not found"
   end
+
   local ok, res = pcall(function() return entry.request(qty) end)
   if not ok then return false, tostring(res) end
   return true, res
 end
+
 
 
 

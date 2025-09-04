@@ -17,6 +17,7 @@ local boot      = require("craft_boot")   -- НОВЫЙ: экран предза
 pcall(function() model.load_cache("/home/data/craft_cache.lua") end)
 
 
+
 local function say(msg)
   if chatBox then pcall(function() chatBox.say(msg) end) end
 end
@@ -201,14 +202,17 @@ while true do
       end
 
     elseif action == "reload_cache" then
-      view.open_loader("Перестройка кеша…"); view.update_loader(1,1,""); view.render_loader()
-      local okR, mods2, cache2 = boot.run("ME Cache Builder")
+      local okR, mods2, cache2 = boot.run("ME Cache Builder")  -- покажет тот самый экран прогресса
       if okR then
-        model.set_all_mods(mods2 or {}); model.set_craft_cache(cache2 or {})
+        model.set_all_mods(mods2 or {})
+        model.set_craft_cache(cache2 or {})
         pcall(function() model.save_cache("/home/data/craft_cache.lua") end)
+        view.set_mods(model.get_all_mods())
       end
-      view.close_loader()
-      view.draw_shell("&d[Панель ME-крафта]"); reload_list(); draw_info_for(nil)
+      view.draw_shell("&d[Панель ME-крафта]")
+      reload_list()
+      draw_info_for(nil)
+
 
     end
 
