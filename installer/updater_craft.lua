@@ -9,6 +9,7 @@ local DEFAULT_FILES = {
   "lib/craft_gui.lua",
   "lib/craft_model.lua",
   "lib/ugui.lua",
+  "lib/ugui_core.lua",
   "lib/craft_boot.lua",
 }
 local APP_TITLE = "OCFS — Updater"
