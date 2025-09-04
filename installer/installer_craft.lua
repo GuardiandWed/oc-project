@@ -16,6 +16,7 @@ local DEFAULT_FILES = {
   "lib/ugui_core.lua",
   "games/games_list.json",
   "data/boot_log.txt"
+  "lib/chatcmd.lua",
 }
 
 local APP_TITLE   = "HauseGames — Installer"
