@@ -6,6 +6,10 @@ local term      = require("term")
 local gpu       = component.isAvailable("gpu") and component.gpu or nil
 local chatBox   = component.isAvailable("chat_box") and component.chat_box or nil
 
+package.loaded["craft_model"] = nil
+package.loaded["craft_gui"]   = nil
+package.loaded["craft_boot"]  = nil
+
 local view      = require("craft_gui")
 local model     = require("craft_model")
 local boot      = require("craft_boot")   -- НОВЫЙ: экран предзагрузки кеша
