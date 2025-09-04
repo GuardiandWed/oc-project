@@ -222,25 +222,7 @@ function M.cancel_job(id)
   return false, res
 end
 
--- === ПУБЛИЧНЫЕ СЕТТЕРЫ ДЛЯ ПРЕДЗАГРУЗКИ (добавить в craft_model.lua) ===
-function M.set_all_mods(arr)
-  M.cache.allMods, M.cache.modsSet = {}, {}
-  for _,m in ipairs(arr or {}) do
-    if m and not M.cache.modsSet[m] then
-      M.cache.modsSet[m] = true
-      M.cache.allMods[#M.cache.allMods+1] = m
-    end
-  end
-  table.sort(M.cache.allMods)
-  M.cache.ts = os.time()
-end
 
-function M.set_craft_cache(cache)
-  cache = cache or {}
-  M.craftCache.rows  = cache.rows or {}
-  M.craftCache.byMod = cache.byMod or {}
-  M.craftCache.built = cache.built and true or (#M.craftCache.rows > 0)
-end
 
 
 return M
