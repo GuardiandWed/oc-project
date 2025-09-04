@@ -4,6 +4,13 @@ local component = require("component")
 local M = {}
 M.ME = component.isAvailable("me_controller") and component.me_controller or nil
 
+-- кеш модов для быстрого старта
+M.cache = {
+  allMods = {},          -- массив строк
+  modsSet = {},          -- set: mod -> true
+  ts = 0
+}
+
 local function _raw_craftables(filter)
   if not M.ME then return {} end
   local ok, list = pcall(function() return M.ME.getCraftables(filter) end)
@@ -44,14 +51,38 @@ local function _getItemRecord(name, damage)
   return nil
 end
 
+-- построй список модов один раз из всей сети
+function M.rebuild_cache()
+  M.cache = { allMods = {}, modsSet = {}, ts = os.time() }
+  if not M.ME then return end
+  local ok, items = pcall(function() return M.ME.getItemsInNetwork() end)
+  if not ok or type(items) ~= "table" then return end
+  local set = {}
+  for i=1,#items do
+    local it = items[i] or {}
+    local name = it.name or (it.item and it.item.name)  -- иногда структура разная
+    local mod = _modFromName(name)
+    if mod ~= "unknown" then set[mod] = true end
+  end
+  local arr = {}
+  for m,_ in pairs(set) do arr[#arr+1] = m end
+  table.sort(arr)
+  M.cache.allMods = arr
+  M.cache.modsSet = set
+end
+
+function M.get_all_mods()
+  return M.cache.allMods or {}
+end
+
 function M.get_craftables(query, opts)
   opts = opts or {}
   local result = {}
   if not M.ME then return result end
 
-  -- AE2 умеет «label = query», но мы всё равно фильтруем сами для подстроки/точного
   local filter = (query and query ~= "") and { label = query } or nil
   local raw = _raw_craftables(filter)
+  local modSet = opts.modSet  -- может быть nil (значит «все»)
 
   for i = 1, #raw do
     local entry = raw[i]
@@ -59,26 +90,20 @@ function M.get_craftables(query, opts)
     local label = st.label or st.name or "<?>"
     local name  = st.name
     local dmg   = st.damage
+    local mod   = _modFromName(name)
 
-    if _match(label, query, opts.exact) then
-      local stored, craftable
-      if opts.onlyStored or opts.onlyCraftable then
-        local rec = _getItemRecord(name, dmg)
-        stored    = (rec and rec.size) or 0
-        craftable = not not (rec and (rec.isCraftable or rec.is_craftable))
-        if opts.onlyStored and stored <= 0 then goto continue end
-        if opts.onlyCraftable and not craftable then goto continue end
+    -- поиск по подстроке + мод-фильтр
+    if _match(label, query, false) then
+      if (not modSet) or modSet[mod] then
+        result[#result+1] = {
+          entry  = entry,
+          label  = label,
+          name   = name,
+          damage = dmg,
+          mod    = mod,
+        }
       end
-
-      result[#result+1] = {
-        entry  = entry,
-        label  = label,
-        name   = name,
-        damage = dmg,
-        mod    = _modFromName(name),
-      }
     end
-    ::continue::
   end
   return result
 end
@@ -141,11 +166,9 @@ function M.get_item_info(craft_row)
 end
 
 local function _arr(t)
-  -- нормализуем jobs в массив
   if type(t) ~= "table" then return {} end
   local out, n = {}, 0
   for i,v in ipairs(t) do out[#out+1]=v; n=n+1 end
-  -- если ipairs дал 0, попробуем по парам (случай map-like)
   if n==0 then for _,v in pairs(t) do out[#out+1]=v end end
   return out
 end
@@ -158,8 +181,6 @@ function M.get_jobs()
   end)
   if not ok then return {} end
   jobs = _arr(jobs)
-
-  -- приведём к унифицированному виду для GUI
   local norm = {}
   for i, j in ipairs(jobs) do
     local id    = j.id or j.ID or j.JobID or i

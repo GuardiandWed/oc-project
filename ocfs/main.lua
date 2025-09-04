@@ -6,9 +6,8 @@ local term      = require("term")
 local gpu       = component.isAvailable("gpu") and component.gpu or nil
 local chatBox   = component.isAvailable("chat_box") and component.chat_box or nil
 
-local gui       = require("ugui")
-local model     = require("craft_model")
 local view      = require("craft_gui")
+local model     = require("craft_model")
 
 local function say(msg)
   if chatBox then pcall(function() chatBox.say(msg) end) end
@@ -22,14 +21,20 @@ end
 
 view.draw_shell("&d[Панель ME-крафта]")
 
+-- быстрый кеш модов (1 запрос ко всей сети)
+model.rebuild_cache()
+view.set_mods(model.get_all_mods())
+
+-- после загрузки GUI сразу требуем выбор модов
+view.open_mods()
+view.render_mods()
+local firstRun = true
+
 local function reload_list()
-  -- передаём фильтры в модель
-  local opts = {
-    exact         = view.filters.exact,
-    onlyCraftable = view.filters.onlyCraftable,
-    onlyStored    = view.filters.onlyStored,
-  }
-  view.craftables = model.get_craftables(view.searchText, opts)
+  local modSet = view.get_selected_mods_set()  -- { mod -> true }
+  local search = view.searchText
+  -- фильтра-плашки убраны, оставляем только поиск и моды
+  view.craftables = model.get_craftables(search, { modSet = modSet })
   local cpu = model.get_cpu_summary()
   view.render_list(cpu)
 end
@@ -45,7 +50,7 @@ local function draw_info_for(row)
   view.render_info(info)
 end
 
-reload_list()
+-- пока моды не выбраны — не грузим список
 draw_info_for(nil)
 
 while true do
@@ -59,7 +64,7 @@ while true do
       draw_info_for(view.dialog.item)
       view.render_dialog()
 
-    elseif action == "filters_change" or action == "focus_search" then
+    elseif action == "focus_search" or action == "search_change" or action == "search_submit" then
       view.draw_shell("&d[Панель ME-крафта]")
       reload_list()
 
@@ -96,16 +101,23 @@ while true do
 
     elseif action == "jobs_close" then
       view.draw_shell("&d[Панель ME-крафта]")
-      reload_list()
+      if not firstRun then reload_list() end
 
     elseif action == "mods_open" or action == "mods_toggle" then
       view.render_mods()
 
     elseif action == "mods_cancel" then
-      view.draw_shell("&d[Панель ME-крафта]")
-      reload_list()
+      -- во время первичного запуска отменять нельзя — требуем выбор
+      if firstRun then
+        view.open_mods()
+        view.render_mods()
+      else
+        view.draw_shell("&d[Панель ME-крафта]")
+        reload_list()
+      end
 
     elseif action == "mods_apply" then
+      firstRun = false
       view.close_mods()
       view.draw_shell("&d[Панель ME-крафта]")
       reload_list()
@@ -115,15 +127,13 @@ while true do
     local ch, code = a2, a3
     local action = view.handle_key_down(ch, code)
 
-    if action == "search_change" then
+    if action == "search_change" or action == "search_submit" then
       view.draw_shell("&d[Панель ME-крафта]")
       reload_list()
-    elseif action == "search_submit" then
-      reload_list()
-      view.draw_shell("&d[Панель ME-крафта]")
 
     elseif action == "dialog_qty_change" then
       view.render_dialog()
+
     elseif action == "dialog_ok" then
       local qty = tonumber(view.dialog.qty) or 1
       local ok, err = model.request_craft(view.dialog.item, qty)
@@ -136,14 +146,20 @@ while true do
       view.draw_shell("&d[Панель ME-крафта]")
       reload_list()
       draw_info_for(nil)
+
     elseif action == "dialog_cancel" then
       view.draw_shell("&d[Панель ME-крафта]")
       reload_list()
       draw_info_for(nil)
 
     elseif action == "jobs_close" or action == "mods_cancel" then
-      view.draw_shell("&d[Панель ME-крафта]")
-      reload_list()
+      if not firstRun then
+        view.draw_shell("&d[Панель ME-крафта]")
+        reload_list()
+      else
+        view.open_mods()
+        view.render_mods()
+      end
     end
 
   elseif ev == "interrupted" then

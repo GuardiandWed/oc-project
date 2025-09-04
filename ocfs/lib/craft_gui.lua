@@ -7,7 +7,7 @@ local G = {}
 
 -- геометрия
 G.bounds       = { x = 2,  y = 2,  w = 116, h = 36 }
-G.listBounds   = { x = 4,  y = 10, w = 70,  h = 21 } -- ниже: поиск + фильтры
+G.listBounds   = { x = 4,  y = 10, w = 70,  h = 21 }
 G.infoBounds   = { x = 76, y = 7,  w = 40,  h = 24 }
 G.searchBounds = { x = 4,  y = 4,  w = 50,  h = 1  }
 G.filtersY     = 7
@@ -18,19 +18,13 @@ G.craftables   = {}
 G.rowMap       = {}
 G.focusSearch  = false
 
--- лёгкие фильтры
-G.filters = {
-  onlyCraftable = false,
-  onlyStored    = false,
-  exact         = false,
-}
+-- список всех модов приходит извне
+G.allMods      = {}   -- массив строк
 
 -- фильтр по модам (мультивыбор)
 G.modFilter = {
   selected = {},     -- set: mod -> true
-  includeOther = false,
-  all = true,        -- «Все»
-  topMods = {},      -- { {mod, count}, ... }  — заполняется из текущего списка
+  all      = false,  -- если true — игнорировать selected
 }
 
 -- верхние кнопки
@@ -55,31 +49,24 @@ end
 local function pointIn(tx,ty,r)
   return r and tx >= r.x and ty >= r.y and tx <= r.x + r.w - 1 and ty <= r.y + r.h - 1
 end
-local function stripAmp(s)
-  return (tostring(s or ""):gsub("&.", "")) -- выкидываем &-коды sgui
-end
-local function textWidth(s)
-  return unicode.len(stripAmp(s))
-end
-local function ucut(s, max)
-  if unicode.len(s) <= max then return s end
-  return unicode.sub(s, 1, math.max(0, max-3)) .. "..."
-end
+local function stripAmp(s) return (tostring(s or ""):gsub("&.", "")) end
+local function textWidth(s) return unicode.len(stripAmp(s)) end
+local function ucut(s, max) if unicode.len(s) <= max then return s end return unicode.sub(s,1,math.max(0,max-3)).."..." end
 
--- пересчёт Top-модов (по текущему G.craftables)
-local function rebuildTopMods()
-  local freq = {}
-  for _,r in ipairs(G.craftables or {}) do
-    local m = r.mod or "unknown"
-    freq[m] = (freq[m] or 0) + 1
-  end
-  local arr = {}
-  for k,v in pairs(freq) do arr[#arr+1] = {mod=k, count=v} end
-  table.sort(arr, function(a,b) return a.count > b.count end)
-  -- ограничим список 15ю, «Остальное» будет всем остальным
-  local top = {}
-  for i=1, math.min(15, #arr) do top[#top+1] = arr[i] end
-  G.modFilter.topMods = top
+-- API для main.lua
+function G.set_mods(list)
+  G.allMods = list or {}
+  -- по умолчанию ничего не выбрано; пользователь обязан выбрать
+  G.modFilter.selected = {}
+  G.modFilter.all = false
+end
+function G.get_selected_mods_set()
+  if G.modFilter.all then return nil end -- nil = без фильтра (все)
+  local s = G.modFilter.selected or {}
+  local has = false
+  for _,__ in pairs(s) do has = true break end
+  if not has then return {} end
+  return s
 end
 
 -- ===== каркас =====
@@ -87,7 +74,7 @@ function G.draw_shell(title)
   gui.drawMain(title or "&d[Крафты ME]", gui.colors["border"], "2")
   gui.drawFrame(G.bounds.x, G.bounds.y, G.bounds.w, G.bounds.h, "Панель крафта", gui.colors["border"])
 
-  -- верхние кнопки с точной шириной
+  -- верхние кнопки
   local jlbl, slbl = "&b"..G.btnJobs.label, "&c"..G.btnStop.label
   gui.text(G.btnJobs.x, G.btnJobs.y, jlbl)
   gui.text(G.btnStop.x, G.btnStop.y, slbl)
@@ -103,68 +90,26 @@ function G.draw_shell(title)
   shown = ucut(shown, maxChars)
   gui.text(G.searchBounds.x + 8, G.searchBounds.y, "&f" .. shown .. caret)
 
-  -- фильтры (пилы)
+  -- строка фильтра модов (кратко)
   clearRect(4, G.filtersY, 70, 1)
-  local x = 4
-  G.filterHotspots = {}
-  local function pill(label, active)
-    local txt = (active and "&a[") or "&7["
-    txt = txt .. label .. "] "
-    gui.text(x, G.filtersY, txt)
-    local w = textWidth(txt)
-    table.insert(G.filterHotspots, { x=x, y=G.filtersY, w=w, h=1, key=label })
-    x = x + w + 1
-  end
-  pill("CRAFT",  G.filters.onlyCraftable)
-  pill("STOCK",  G.filters.onlyStored)
-  pill("EXACT",  G.filters.exact)
-
-  -- модовый фильтр, показываем текущее состояние кратко
   local modSummary
   if G.modFilter.all then
     modSummary = "Все"
   else
     local list = {}
-    for _,t in ipairs(G.modFilter.topMods or {}) do
-      if G.modFilter.selected[t.mod] then table.insert(list, t.mod) end
+    for _,m in ipairs(G.allMods or {}) do
+      if G.modFilter.selected[m] then list[#list+1] = m end
     end
-    if G.modFilter.includeOther then table.insert(list, "Остальное") end
-    if #list == 0 then modSummary = "—" else modSummary = table.concat(list, ", ") end
+    modSummary = (#list == 0) and "—" or table.concat(list, ", ")
   end
-  local modLabel = "&e[Мод: "..(modSummary or "Все").."]"
-  gui.text(x, G.filtersY, modLabel)
+  local modLabel = "&e[Моды: "..(modSummary or "—").."]"
+  gui.text(4, G.filtersY, modLabel)
   local wmod = textWidth(modLabel)
-  G.modHotspot = { x=x, y=G.filtersY, w=wmod, h=1 }
+  G.modHotspot = { x=4, y=G.filtersY, w=wmod, h=1 }
 
   -- рамки
   gui.drawFrame(G.listBounds.x-2,  G.listBounds.y-2,  G.listBounds.w+4,  G.listBounds.h+4,  "Доступно к крафту", gui.colors["border"])
   gui.drawFrame(G.infoBounds.x-2,  G.infoBounds.y-2,  G.infoBounds.w+4,  G.infoBounds.h+4,  "Информация",        gui.colors["border"])
-end
-
--- применить фильтр по модам к произвольному списку
-local function applyModFilter(src)
-  if G.modFilter.all then return src end
-  local haveSelections = false
-  for _,t in ipairs(G.modFilter.topMods or {}) do
-    if G.modFilter.selected[t.mod] then haveSelections = true break end
-  end
-  if not haveSelections and not G.modFilter.includeOther then
-    return src
-  end
-
-  local topSet = {}
-  for _,t in ipairs(G.modFilter.topMods or {}) do topSet[t.mod] = true end
-
-  local out = {}
-  for _,row in ipairs(src or {}) do
-    local m = row.mod or "unknown"
-    local isTop = topSet[m]
-    local pass = false
-    if isTop and G.modFilter.selected[m] then pass = true end
-    if (not isTop) and G.modFilter.includeOther then pass = true end
-    if pass then table.insert(out, row) end
-  end
-  return out
 end
 
 function G.render_list(cpuSummary)
@@ -172,7 +117,7 @@ function G.render_list(cpuSummary)
   clearRect(x,y,w,h)
   G.rowMap = {}
 
-  local src = applyModFilter(G.craftables or {})
+  local src = G.craftables or {}
   local shown = math.min(#src, h)
   for i = 1, shown do
     local line = src[i].label or "<?>"
@@ -284,14 +229,15 @@ end
 
 -- ===== модалка выбора модов =====
 local function buildModsDialog()
-  rebuildTopMods()
   G.modsDialog.items = {}
   G.modsDialog.toggleMap = {}
-  for _,t in ipairs(G.modFilter.topMods or {}) do
-    table.insert(G.modsDialog.items, { mod=t.mod, title=t.mod })
+  -- список модов из всей сети
+  for _,mod in ipairs(G.allMods or {}) do
+    table.insert(G.modsDialog.items, { mod=mod, title=mod })
   end
-  table.insert(G.modsDialog.items, { mod="__OTHER__", title="Остальное" })
-  table.insert(G.modsDialog.items, { mod="__ALL__",   title="Все" })
+  -- служебные пункты
+  table.insert(G.modsDialog.items, { mod="__ALL__",   title="Выбрать все" })
+  table.insert(G.modsDialog.items, { mod="__NONE__",  title="Снять выбор" })
 end
 
 function G.open_mods()
@@ -304,7 +250,7 @@ function G.render_mods()
   if not G.modsDialog.visible then return end
   local items = G.modsDialog.items or {}
   local W = 44
-  local H = math.max(8, math.min(22, 5 + #items))
+  local H = math.max(8, math.min(26, 5 + #items))
   local x,y = centerBox(W,H)
   gui.drawFrame(x,y,W,H,"Фильтр по модам", gui.colors["border"])
 
@@ -313,9 +259,9 @@ function G.render_mods()
   for i,it in ipairs(items) do
     local state
     if it.mod == "__ALL__" then
-      state = G.modFilter.all and "x" or " "
-    elseif it.mod == "__OTHER__" then
-      state = (not G.modFilter.all and G.modFilter.includeOther) and "x" or " "
+      state = (G.modFilter.all or false) and "x" or " "
+    elseif it.mod == "__NONE__" then
+      state = " "
     else
       state = (not G.modFilter.all and G.modFilter.selected[it.mod]) and "x" or " "
     end
@@ -355,7 +301,6 @@ function G.handle_touch(screen, tx, ty)
         return { action="job_cancel", id=btn.id }
       end
     end
-    -- клик мимо — закрыть
     G.close_jobs()
     return "jobs_close"
   end
@@ -385,39 +330,24 @@ function G.handle_touch(screen, tx, ty)
     else
       for _,hs in ipairs(G.modsDialog.toggleMap or {}) do
         if pointIn(tx,ty,hs) then
-          -- переключить
           if hs.mod == "__ALL__" then
-            G.modFilter.all = not G.modFilter.all
-            if G.modFilter.all then
-              G.modFilter.selected = {}
-              G.modFilter.includeOther = false
-            end
-          elseif hs.mod == "__OTHER__" then
-            if not G.modFilter.all then
-              G.modFilter.includeOther = not G.modFilter.includeOther
-            end
+            -- выбрать все
+            G.modFilter.all = true
+            G.modFilter.selected = {}
+          elseif hs.mod == "__NONE__" then
+            -- снять выбор (вкл. ручной выбор)
+            G.modFilter.all = false
+            G.modFilter.selected = {}
           else
-            if not G.modFilter.all then
-              G.modFilter.selected[hs.mod] = not G.modFilter.selected[hs.mod]
-            end
+            -- ручной мультивыбор
+            G.modFilter.all = false
+            G.modFilter.selected[hs.mod] = not G.modFilter.selected[hs.mod]
           end
           return "mods_toggle"
         end
       end
-      -- клик мимо — закрыть
       G.close_mods()
       return "mods_cancel"
-    end
-  end
-
-  -- фильтры-пилы
-  for _,hs in ipairs(G.filterHotspots or {}) do
-    if pointIn(tx,ty,hs) then
-      if hs.key=="CRAFT" then G.filters.onlyCraftable = not G.filters.onlyCraftable
-      elseif hs.key=="STOCK" then G.filters.onlyStored  = not G.filters.onlyStored
-      elseif hs.key=="EXACT" then G.filters.exact       = not G.filters.exact
-      end
-      return "filters_change"
     end
   end
 
@@ -448,11 +378,11 @@ function G.handle_touch(screen, tx, ty)
 end
 
 function G.handle_key_down(ch, code)
-  -- модалка заданий: Esc закрыть
+  -- модалка заданий
   if G.jobsDialog.visible then
     if code == 1 then G.close_jobs(); return "jobs_close" end
   end
-  -- модалка модов: Esc закрыть
+  -- модалка модов
   if G.modsDialog.visible then
     if code == 1 then G.close_mods(); return "mods_cancel" end
   end
@@ -482,7 +412,7 @@ function G.handle_key_down(ch, code)
     return nil
   end
 
-  -- ввод в поиск (ЮНИКОД!)
+  -- ввод в поиск (ЮНИКОД)
   if G.focusSearch then
     if ch and ch >= 32 then
       G.searchText = G.searchText .. unicode.char(ch)
