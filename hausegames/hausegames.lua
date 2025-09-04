@@ -13,12 +13,12 @@ local rows, cols    = 2,3
 local cardW, cardH  = 26,11
 local padX, padY    = 10,8
 
--- поле игр (компактная шапка => выше)
-local gridX, gridY  = 3,4
+-- поле с играми компактнее (рамка по 1px ×2, внутренние поля уменьшены)
+local gridX, gridY  = 3,7     -- ниже, чтобы рамка шла «под» заголовком
 local gridW         = cols*cardW + (cols-1)*padX + 10
 local gridH         = rows*cardH + (rows-1)*padY + 10
 
--- правая колонка
+-- правая колонка ближе к центру (сдвиг влево)
 local sidebarX      = gridX + gridW + 4
 local sidebarW      = math.max(36, W - sidebarX - 3)
 local sideTop       = gridY
@@ -32,14 +32,12 @@ local function draw_card(x,y,w,h, g)
   local name    = g and g.name or "Пусто"
   local created = g and g.created or "--"
   local played  = g and g.played_h or "--"
-  gui.text(x+3, y+2, "&f"..name)
-  gui.text(x+3, y+4, "&7Создано: &f"..created)
-  gui.text(x+3, y+5, "&7Сыграно: &f"..played)
-  gui.button(x+4, y+h-4, w-8, 3, "Запустить", {
+  gui.text(x+2, y+1, "&f"..name)
+  gui.text(x+2, y+3, "&7Создано: &f"..created)
+  gui.text(x+2, y+4, "&7Сыграно: &f"..played)
+  gui.button(x+3, y+h-4, w-6, 3, "  Запустить  ", {
     bg = core.theme.primary, fg = 0x000000,
-    parentBg = core.theme.card,   -- корректный фон для скруглений
-    radius   = 2,
-    onClick  = function() require("gamesboot").run(name) end
+    onClick = function() require("gamesboot").run(name) end
   })
 end
 
@@ -76,14 +74,9 @@ end
 
 local function draw_footer()
   local y = H - 4
-  gui.button(4,  y, 30, 3, "Рестарт программы", {
-    bg = core.theme.primary, fg = 0x000000, parentBg = core.theme.bg, radius=2,
-    onClick = restart_program
-  })
-  gui.button(38, y, 30, 3, "Выход из программы", {
-    bg = core.theme.danger, fg = 0x000000, parentBg = core.theme.bg, radius=2,
-    onClick = function() if _G.__hg_bot then pcall(_G.__hg_bot.stop, _G.__hg_bot) end; core.shutdown() end
-  })
+  gui.button(4,  y, 30, 3, "  Рестарт программы  ", { bg = core.theme.primary, fg = 0x000000, onClick = restart_program })
+  gui.button(38, y, 30, 3, "  Выход из программы  ", { bg = core.theme.danger,  fg = 0x000000,
+    onClick = function() if _G.__hg_bot then pcall(_G.__hg_bot.stop, _G.__hg_bot) end; core.shutdown() end })
 end
 
 local function render()
@@ -98,6 +91,7 @@ end
 
 render()
 
+-- чат-бот как был
 local Chat = require("chatcmd")
 local bot = Chat.new{ prefix="@", name="Оператор", admins={"HauseMasters"} }
 bot:start()
