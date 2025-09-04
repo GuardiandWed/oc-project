@@ -12,7 +12,7 @@ local DEFAULT_FILES = {
   "games/games_list.lua",
   "data/boot_log.txt"
 }
-local APP_TITLE = "OCFS — Updater"
+local APP_TITLE = "HauseGames — Updater"
 local REBOOT_AFTER = false
 
 -------------------------------------------------------------------------------

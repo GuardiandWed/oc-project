@@ -6,7 +6,7 @@
 ------------------------------------ CONFIG ------------------------------------
 -- URL должен указывать ИМЕННО на папку ocfs/ в raw:
 -- Пример: "https://raw.githubusercontent.com/<user>/<repo>/refs/heads/main/ocfs/"
-local REPOSITORY = "https://raw.githubusercontent.com/GuardiandWed/oc-project/refs/heads/main/ocfs/"
+local REPOSITORY = "https://raw.githubusercontent.com/GuardiandWed/oc-project/refs/heads/main/hausegames/"
 
 -- Если manifest.txt в репозитории отсутствует, используем этот дефолтный список:
 local DEFAULT_FILES = {
@@ -18,7 +18,7 @@ local DEFAULT_FILES = {
   "data/boot_log.txt"
 }
 
-local APP_TITLE   = "OCFS — Installer"
+local APP_TITLE   = "HauseGames — Installer"
 local REBOOT_AFTER = false   -- при желании можно включить авт ребут
 
 -------------------------------------------------------------------------------
