@@ -18,6 +18,17 @@ local function say(msg)
   if chatBox then pcall(function() chatBox.say(msg) end) end
 end
 
+local Chat = require("chatcmd")
+
+-- создаём чат-обработчик
+local bot = Chat.new{
+  prefix = "@",
+  name   = "Оператор",
+  admins = {"HauseMasters"} -- твой ник
+}
+
+bot:start()
+
 term.clear()
 if gpu then
   pcall(function() gpu.setResolution(120, 40) end)
