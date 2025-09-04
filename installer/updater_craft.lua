@@ -1,6 +1,5 @@
 -- OCFS Updater (OpenComputers)
 -- Обновляет те же файлы, что и инсталлер (через manifest.txt или DEFAULT_FILES).
--- Делает бэкап перезаписываемых файлов: <name>.bak.<timestamp>
 
 ------------------------------------ CONFIG ------------------------------------
 local REPOSITORY = "https://raw.githubusercontent.com/GuardiandWed/oc-project/refs/heads/main/ocfs/"
@@ -14,7 +13,6 @@ local DEFAULT_FILES = {
 }
 local APP_TITLE = "OCFS — Updater"
 local REBOOT_AFTER = false
-local MAKE_BACKUP = true
 
 -------------------------------------------------------------------------------
 local component = require("component")
@@ -142,16 +140,6 @@ local function getFileList()
   return DEFAULT_FILES
 end
 
-local function backupIfNeeded(path)
-  if not MAKE_BACKUP then return end
-  if fs.exists(path) then
-    local ts = tostring(os.time()):gsub("%.","")
-    local bak = ("%s.bak.%s"):format(path, ts)
-    pcall(fs.copy, path, bak)
-    log("Backup: "..path.." -> "..bak, COL_DIM)
-  end
-end
-
 local function update()
   drawChrome()
   writeStatus("Подготовка к обновлению…", COL_DIM)
@@ -171,7 +159,6 @@ local function update()
     local url  = REPOSITORY .. rel
     local dest = targetPathFor(rel)
     ensureDir(dirname(dest))
-    backupIfNeeded(dest)
 
     writeStatus(("Обновление [%02d/%02d] %s"):format(i,total,rel), COL_TEXT)
     log("wget "..shorten(url,60).." -> "..dest, COL_DIM)
