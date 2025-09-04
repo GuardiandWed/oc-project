@@ -1,4 +1,4 @@
--- /home/hausegames.lua — точная раскладка и стиль примера
+-- /home/hausegames.lua — раскладка «как на примере»
 
 local event = require("event")
 local core  = require("ugui_core")
@@ -8,26 +8,28 @@ local boot  = require("gamesboot")
 core.init_screen(core.theme.bg, core.theme.text)
 local W,H = core.size()
 
--- сетка игр (3x2), карточки чуть выше под h=3 кнопки
+-- сетка 3×2
 local rows, cols    = 2,3
 local cardW, cardH  = 26,11
-local padX, padY    = 8,6
-local gridX, gridY  = 3,6
-local gridW         = cols*cardW + (cols-1)*padX + 8
-local gridH         = rows*cardH + (rows-1)*padY + 8
+local padX, padY    = 10,8
+local gridX, gridY  = 3,8  -- чуть ниже, чтобы рамка «шла под» заголовком
+local gridW         = cols*cardW + (cols-1)*padX + 16
+local gridH         = rows*cardH + (rows-1)*padY + 16
 
--- правая колонка как на примере
-local sidebarX      = gridX + gridW + 6
+-- правая колонка
+local sidebarX      = gridX + gridW + 8
 local sidebarW      = math.max(36, W - sidebarX - 4)
 local sideTop       = gridY
 local sideGap       = 4
 
 local function header()
-  gui.drawMain("  HAUSEGAMES  ")
+  -- HOUSE[серый] + MASTERS[жёлтый], без подложки, с «щёчками»
+  gui.drawMain(5)
 end
 
 local function draw_grid_bg()
-  core.card_shadow(gridX-2, gridY-2, gridW, gridH, core.theme.gridBg, core.theme.border, core.theme.shadow2)
+  -- толстая квадратная рамка + светло-серый фон
+  gui.bigGrid(gridX-2, gridY-2, gridW, gridH)
 end
 
 local function draw_card(x,y,w,h, game)
@@ -40,8 +42,7 @@ local function draw_card(x,y,w,h, game)
   gui.text(x+2, y+3, "&7Создано: &f"..created)
   gui.text(x+2, y+4, "&7Сыграно: &f"..played)
 
-  -- крупная кнопка в стиле примера
-  gui.button(x+2, y+h-4, w-4, 3, "  Запустить  ", {
+  gui.button(x+3, y+h-4, w-6, 3, "  Запустить  ", {
     bg = core.theme.primary, fg = 0x000000,
     onClick = function() boot.run(name) end
   })
@@ -81,8 +82,8 @@ end
 
 local function draw_footer()
   local y = H - 4
-  gui.button(4,  y, 28, 3, "  Рестарт программы  ", { bg = core.theme.primary, fg = 0x000000, onClick = restart_program })
-  gui.button(34, y, 28, 3, "  Выход из программы  ",  { bg = core.theme.danger,  fg = 0x000000,
+  gui.button(4,  y, 30, 3, "  Рестарт программы  ", { bg = core.theme.primary, fg = 0x000000, onClick = restart_program })
+  gui.button(38, y, 30, 3, "  Выход из программы  ", { bg = core.theme.danger,  fg = 0x000000,
     onClick = function() if _G.__hg_bot then pcall(_G.__hg_bot.stop, _G.__hg_bot) end; core.shutdown() end })
 end
 
