@@ -136,10 +136,6 @@ function Chat:_handle(nick, raw)
   local cmdName = parts[1]; table.remove(parts,1)
   if not cmdName or cmdName=="" then return true end
   local cmd = self.commands[cmdName]
-  if not cmd then
-    self._ctxBase.reply(("Неизвестная команда: %s%s (см. %shelp)"):format(self.prefix, cmdName, self.prefix))
-    return true
-  end
 
   local ctx = { nick=nick, isAdmin=self.admins[nick] or false, args=parts }
   for k,v in pairs(self._ctxBase) do ctx[k]=v end

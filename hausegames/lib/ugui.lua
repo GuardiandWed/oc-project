@@ -1,4 +1,4 @@
--- /lib/ugui.lua — адаптер к ugui_core с юникод-рендером и &-цветами
+-- /lib/ugui.lua — адаптер к ugui_core с &-цветами и баннером
 
 local Core     = require("ugui_core")
 local unicode  = require("unicode")
@@ -16,7 +16,7 @@ M.colors = { border="9", text="f", dim="7", primary="b", danger="c", warn="e", o
 M.palette = palette
 M.theme   = Core.theme
 
--- юникодная печать + &-цветы
+-- печать строки с &-цветами
 function M.text(x, y, str)
   if not str or str=="" then return end
   local ulen = unicode.len(str)
@@ -36,19 +36,21 @@ function M.text(x, y, str)
   end
 end
 
-function M.drawMain(title, borderCode)
+-- верхний баннер
+function M.drawMain(title)
   local w = select(1, require("component").gpu.getResolution())
-  local col = palette[borderCode or M.colors.border] or Core.theme.border
-  Core.text(1, 1, string.rep("─", w), col)
-  if title and title ~= "" then M.text(2, 1, title) end
+  local label = title or "HAUSEGAMES"
+  local bannerW = unicode.len(label) + 6
+  local x = math.max(2, math.floor((w - bannerW)/2))
+  local y = 1
+  -- “жёлтый” баннер и тень
+  Core.rect(x+2, y+1, bannerW, 3, 0x121316)
+  Core.rect(x,   y,   bannerW, 3, 0xE0B100)
+  Core.text(x+3, y+1, label, 0x000000)
 end
 
-function M.drawFrame(x,y,w,h,title,borderCode)
-  local col = palette[borderCode or M.colors.border] or Core.theme.border
-  Core.card_shadow(x,y,w,h, Core.theme.card, col, Core.theme.shadow)
-  if title and title~="" then
-    M.text(x+2, y, "["..title.."]")
-  end
+function M.drawFrame(x,y,w,h,title)
+  Core.card_shadow(x,y,w,h, Core.theme.panelBg, Core.theme.border, Core.theme.shadow2, title)
 end
 
 -- делегаты
@@ -56,7 +58,7 @@ function M.clear(bg)                     Core.clear(bg or Core.theme.bg) end
 function M.flush()                       Core.flush() end
 function M.rect(x,y,w,h,bg,fg,char)     Core.rect(x,y,w,h,bg,fg,char) end
 function M.frame(x,y,w,h,col)            Core.frame(x,y,w,h,col) end
-function M.card(x,y,w,h,title)           Core.card_shadow(x,y,w,h, Core.theme.card, Core.theme.border, Core.theme.shadow, title) end
+function M.card(x,y,w,h,title)           Core.card(x,y,w,h,title) end
 function M.vbar(x,y,h,value,min,max,col,back) Core.vbar(x,y,h,value,min,max,col,back) end
 function M.log(x,y,w,h,lines)            Core.logpane(x,y,w,h, lines or {}) end
 function M.inBounds(ctrl, cx, cy)        return Core.inBounds(ctrl, cx, cy) end
