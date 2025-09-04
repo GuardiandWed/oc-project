@@ -23,7 +23,6 @@ local theme = {
 
 -- ---------- ИНИТ ЭКРАН/БУФЕР
 core.init_screen(theme.bg, theme.fg)
-
 local W, H = core.size()
 
 -- ---------- ЛОГО / ШАПКА
