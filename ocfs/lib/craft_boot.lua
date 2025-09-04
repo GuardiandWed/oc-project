@@ -95,7 +95,7 @@ local function buildCaches()
   local modsSet, modsArr = {}, {}
   local craftCache = { rows = {}, byMod = {}, built = false }
 
-  -- 1) Моды из всей сети
+    -- 1) Моды из всей сети
   writeStatus("Сканирование сети ME для списка модов…", COL_DIM); tickSpinner()
   local ok1, items = pcall(function() return ME and ME.getItemsInNetwork() or {} end)
   if not ok1 or type(items) ~= "table" then items = {} end
@@ -118,6 +118,19 @@ local function buildCaches()
   end
   table.sort(modsArr)
   log("Найдено модов: "..tostring(#modsArr), COL_OK)
+
+  -- индекс "name:damage" -> label из сети ME
+  local labelByKey = {}
+  for i = 1, total1 do
+    local it = items[i] or {}
+    local nm  = it.name
+    local dmg = it.damage or 0
+    local lbl = it.label
+    if nm and lbl then
+      labelByKey[nm .. ":" .. tostring(dmg)] = lbl
+    end
+  end
+
 
     -- 2) Все крафтабельные шаблоны (через список предметов, без лимита 50)
   writeStatus("Загрузка всех крафтов из ME…", COL_TEXT); tickSpinner()
@@ -152,10 +165,10 @@ local function buildCaches()
     -- если не получилось через entry, используем данные из сети
     st.name   = st.name   or f.name
     st.damage = st.damage or f.damage
-    st.label  = st.label  or st.name or "<?>"
 
+    local key   = (st.name or f.name or "") .. ":" .. tostring(st.damage or f.damage or 0)
     local name = st.name
-    local label = st.label
+    local label = labelByKey[key] or st.label or st.name or "<?>"
     local dmg   = st.damage
     local mod   = "unknown"
     if type(name)=="string" then
