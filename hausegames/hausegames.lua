@@ -1,25 +1,34 @@
 -- /home/hausegames.lua
 
-local function die(msg) io.stderr:write("[HauseGames] "..tostring(msg).."\n"); os.exit(1) end
-local ok,e = pcall(require,"event");         if not ok then die(e) end; local event = e
-ok,e = pcall(require,"ugui_core");           if not ok then die(e) end; local core  = e
-ok,e = pcall(require,"ugui");                if not ok then die(e) end; local gui   = e
-ok,e = pcall(require,"gamesboot");           if not ok then die(e) end; local boot  = e
+local event = require("event")
+local core  = require("ugui_core")
+local gui   = require("ugui")
+local boot  = require("gamesboot")
 
 core.init_screen(core.theme.bg, core.theme.text)
 local W,H = core.size()
 
-local rows, cols  = 2,3
-local cardW, cardH = 26,10
-local padX, padY  = 6,4
-local gridX, gridY = 4,6
+-- сетка игр
+local rows, cols    = 2,3
+local cardW, cardH  = 26,10
+local padX, padY    = 6,4
+local gridX, gridY  = 4,6
+local gridW         = cols*cardW + (cols-1)*padX + 8
+local gridH         = rows*cardH + (rows-1)*padY + 6
 
-local sidebarX = gridX + cols*(cardW+padX) + 6
-local sidebarW = math.max(28, W - sidebarX - 4)
-local sideTop, sideGap = gridY, 2
+-- правая колонка
+local sidebarX      = gridX + gridW + 4
+local sidebarW      = math.max(28, W - sidebarX - 4)
+local sideTop       = gridY
+local sideGap       = 2
 
 local function header()
   gui.drawMain("&e HAUSE&fGAMES  &7— выбери игру", "9")
+end
+
+local function draw_grid_bg()
+  -- аккуратная панель под карточки
+  core.card_shadow(gridX-2, gridY-2, gridW, gridH, core.theme.gridBg, core.theme.border, core.theme.shadow)
 end
 
 local function draw_card(x,y,w,h, game)
@@ -62,27 +71,45 @@ local function draw_sidebar()
   gui.text(sidebarX+2, y+2, "&7Здесь позже будет лог запуска игр…")
 end
 
+local function restart_program()
+  core.clear()
+  local f,err = loadfile("/home/hausegames.lua")
+  if not f then
+    gui.text(2, H-1, "&cОшибка загрузки: &f"..tostring(err))
+    core.flush()
+  else
+    f() -- перезапуск
+  end
+end
+
 local function draw_footer()
   local y = H - 3
   gui.button(4, y, 22, 1, " Рестарт программы ", {
-    bg = core.theme.primary, fg = 0x000000,
-    onClick = function()
-      core.clear(); header(); draw_grid(); draw_sidebar(); draw_footer(); core.flush()
-    end
+    bg = core.theme.primary, fg = 0x000000, onClick = restart_program
   })
   gui.button(28, y, 20, 1, " Выход из программы ", {
-    bg = core.theme.danger, fg = 0x000000,
+    bg = core.theme.danger,  fg = 0x000000,
     onClick = function() core.shutdown() end
   })
 end
 
 local function render()
-  core.clear()
-  header(); draw_grid(); draw_sidebar(); draw_footer()
+  core.clear(core.theme.bg)
+  header()
+  draw_grid_bg()
+  draw_grid()
+  draw_sidebar()
+  draw_footer()
   core.flush()
 end
 
 render()
+
+-- чат-команды: @help, @sleep, @addadmin НИК, @removeadmin НИК
+local Chat = require("chatcmd")
+local bot = Chat.new{ prefix="@", name="Оператор", admins={"HauseMasters"} }
+bot:start()
+
 
 while true do
   local ev = {event.pull()}
