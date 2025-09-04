@@ -2,15 +2,15 @@
 -- Обновляет те же файлы, что и инсталлер (через manifest.txt или DEFAULT_FILES).
 
 ------------------------------------ CONFIG ------------------------------------
-local REPOSITORY = "https://raw.githubusercontent.com/GuardiandWed/oc-project/refs/heads/main/ocfs/"
+local REPOSITORY = "https://raw.githubusercontent.com/GuardiandWed/oc-project/refs/heads/main/hausegames/"
 
 local DEFAULT_FILES = {
-  "main.lua",
-  "lib/craft_gui.lua",
-  "lib/craft_model.lua",
+  "hausegames.lua",
+  "lib/gamesboot.lua",
   "lib/ugui.lua",
   "lib/ugui_core.lua",
-  "lib/craft_boot.lua",
+  "games/games_list.lua",
+  "data/boot_log.txt"
 }
 local APP_TITLE = "OCFS — Updater"
 local REBOOT_AFTER = false
