@@ -2,7 +2,7 @@
 -- сохраняет старый API (&-цвета, drawMain, drawFrame) +
 -- прокидывает расширенные виджеты из ugui_core.
 
-local Core     = require("ugui_core")
+local Core = require("ugui_core")
 local gpu      = require("component").gpu
 local unicode  = require("unicode")
 

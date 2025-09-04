@@ -1,136 +1,95 @@
 -- /home/hausegames.lua
--- HauseGames: стартовый лаунчер игр под OpenComputers
 
-local fs         = require("filesystem")
-local event      = require("event")
-local shell      = require("shell")
+local function die(msg) io.stderr:write("[HauseGames] "..tostring(msg).."\n"); os.exit(1) end
+local ok,e = pcall(require,"event");         if not ok then die(e) end; local event = e
+ok,e = pcall(require,"ugui_core");           if not ok then die(e) end; local core  = e
+ok,e = pcall(require,"ugui");                if not ok then die(e) end; local gui   = e
+ok,e = pcall(require,"gamesboot");           if not ok then die(e) end; local boot  = e
 
-local gui        = require("ugui")         -- наш лёгкий UI слой (поверх ugui_core)
-local core       = require("ugui_core")
-local gamesboot  = require("gamesboot")
+core.init_screen(core.theme.bg, core.theme.text)
+local W,H = core.size()
 
--- ---------- ТЕМА (можно крутить в одном месте)
-local theme = {
-  bg        = 0x1b1b1b,  -- основной фон
-  fg        = 0xE6E6E6,  -- основной текст
-  cardBg    = 0x242424,  -- фон карточек
-  cardFg    = 0xEDEDED,
-  border    = 0x3D8DFF,  -- акцентная рамка
-  accent    = 0x00D1B2,  -- акцент (кнопки)
-  danger    = 0xFF5468,  -- “выход”
-  subtle    = 0x888888
-}
+local rows, cols  = 2,3
+local cardW, cardH = 26,10
+local padX, padY  = 6,4
+local gridX, gridY = 4,6
 
--- ---------- ИНИТ ЭКРАН/БУФЕР
-core.init_screen(theme.bg, theme.fg)
-local W, H = core.size()
+local sidebarX = gridX + cols*(cardW+padX) + 6
+local sidebarW = math.max(28, W - sidebarX - 4)
+local sideTop, sideGap = gridY, 2
 
--- ---------- ЛОГО / ШАПКА
-local function draw_header()
-  local title = " HAUSEGAMES "
-  local x = math.floor((W - #title) / 2)
-  gui.label(x, 2, title, theme.fg)
+local function header()
+  gui.drawMain("&e HAUSE&fGAMES  &7— выбери игру", "9")
 end
 
--- ---------- КАРТОЧКИ ИГР (пока пустые, с плейсхолдерами)
--- сетка 3 x 2 как в примере (можно менять rows/cols)
-local rows, cols = 2, 3
-local padX, padY = 6, 4
-local cardW, cardH = 26, 10
-
--- левый верхний угол области карточек
-local gridX = 6
-local gridY = 6
-
-local cards = {}
-
-local function make_card(x, y, w, h, title, sub1, sub2)
-  core.fill(x, y, w, h, " ", theme.cardBg, theme.cardFg)
-  core.border(x, y, w, h, theme.border)
-
-  gui.label(x+2, y+1, title or "Игра", theme.cardFg)
-  gui.label(x+2, y+3, sub1 or "Создано: --", theme.subtle)
-  gui.label(x+2, y+4, sub2 or "Сыграно: --", theme.subtle)
-
-  -- заглушка кнопки “Запустить” (без логики запуска)
-  local bx, by, bw = x+2, y+h-2, w-4
-  core.button(bx, by, bw, 1, " Запустить ", theme.accent, theme.cardBg, function()
-    -- позже подставим gamesboot.run(game)
-  end)
-
-  table.insert(cards, {x=x,y=y,w=w,h=h})
+local function draw_card(x,y,w,h, game)
+  gui.card(x,y,w,h)
+  local name    = game and game.name or "Пусто"
+  local created = game and game.created or "--"
+  local played  = game and game.played_h or "--"
+  gui.text(x+2, y+1, "&f"..name)
+  gui.text(x+2, y+3, "&7Создано: &f"..created)
+  gui.text(x+2, y+4, "&7Сыграно: &f"..played)
+  gui.button(x+2, y+h-2, w-4, 1, " Запустить ", {
+    bg = core.theme.primary, fg = 0x000000,
+    onClick = function() boot.run(name) end
+  })
 end
 
-local function draw_cards()
-  cards = {}
-  local gx, gy = gridX, gridY
+local function draw_grid()
+  local list = boot.list_games()
   local idx = 1
-
-  -- получим список игр (сейчас — моковые данные от gamesboot)
-  local list = gamesboot.list_games()
-
-  for r=1, rows do
-    for c=1, cols do
-      local x = gx + (c-1) * (cardW + padX)
-      local y = gy + (r-1) * (cardH + padY)
-
-      local item = list[idx]
-      if item then
-        local t  = item.name or ("Игра "..idx)
-        local d1 = "Создано: " .. (item.created or "--")
-        local d2 = "Сыграно: " .. (item.played_h or "--")
-        make_card(x, y, cardW, cardH, t, d1, d2)
-      else
-        make_card(x, y, cardW, cardH, "Пусто", "Добавь игру", "--")
-      end
+  for r=1,rows do
+    for c=1,cols do
+      local x = gridX + (c-1)*(cardW+padX)
+      local y = gridY + (r-1)*(cardH+padY)
+      draw_card(x,y,cardW,cardH, list[idx])
       idx = idx + 1
     end
   end
 end
 
--- ---------- ПАНЕЛЬ НИЗА (кнопки)
+local function draw_sidebar()
+  gui.drawFrame(sidebarX, sideTop, sidebarW, 14, "Информация", "9")
+  gui.text(sidebarX+2, sideTop+2, "&7Выбери игру слева, чтобы увидеть детали")
+
+  local y = sideTop + 14 + sideGap
+  gui.drawFrame(sidebarX, y, sidebarW, 5, "Системные метрики", "9")
+  gui.text(sidebarX+2, y+2, "&7FPS: &f--   &7Память: &f--   &7Uptime: &f--")
+
+  y = y + 5 + sideGap
+  gui.drawFrame(sidebarX, y, sidebarW, 7, "Журнал", "9")
+  gui.text(sidebarX+2, y+2, "&7Здесь позже будет лог запуска игр…")
+end
+
 local function draw_footer()
   local y = H - 3
-
-  -- Рестарт
-  core.button(4, y, 20, 1, " Рестарт программы ", theme.accent, theme.bg, function()
-    -- мягкая перерисовка
-    core.clear(theme.bg, theme.fg)
-    draw_header()
-    draw_cards()
-    draw_footer()
-    core.present()
-  end)
-
-  -- Выход
-  core.button(28, y, 18, 1, " Выход из программы ", theme.danger, theme.bg, function()
-    core.shutdown()
-  end)
-
-  -- маленький статус справа
-  local info = "W:"..W.." H:"..H
-  gui.label(W-#info-2, y, info, theme.subtle)
+  gui.button(4, y, 22, 1, " Рестарт программы ", {
+    bg = core.theme.primary, fg = 0x000000,
+    onClick = function()
+      core.clear(); header(); draw_grid(); draw_sidebar(); draw_footer(); core.flush()
+    end
+  })
+  gui.button(28, y, 20, 1, " Выход из программы ", {
+    bg = core.theme.danger, fg = 0x000000,
+    onClick = function() core.shutdown() end
+  })
 end
 
--- ---------- РЕНДЕР ПОЛНОЙ СЦЕНЫ
 local function render()
-  core.clear(theme.bg, theme.fg)
-  draw_header()
-  draw_cards()
-  draw_footer()
-  core.present()
+  core.clear()
+  header(); draw_grid(); draw_sidebar(); draw_footer()
+  core.flush()
 end
 
--- ---------- MAIN LOOP
 render()
 
 while true do
-  local ev = {event.pull(0.2)}
+  local ev = {event.pull()}
   if ev[1] == "touch" then
-    local _, _, tx, ty = table.unpack(ev)
-    core.dispatch_click(tx, ty)  -- проверяем попадание по всем кнопкам
-  elseif ev[1] == "interrupted" or ev[1] == "key_down" and ev[4] == 46 then
-    -- Ctrl-C или клавиша 'C' с Ctrl (scancode 46) — выходим
+    local _,_,x,y = table.unpack(ev)
+    core.dispatch_click(x,y)
+  elseif ev[1] == "interrupted" then
     core.shutdown()
   end
 end
