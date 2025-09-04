@@ -95,6 +95,7 @@ local function buildCaches()
   local modsSet, modsArr = {}, {}
   local craftCache = { rows = {}, byMod = {}, built = false }
 
+  -- 1) Моды из всей сети
     -- 1) Моды из всей сети
   writeStatus("Сканирование сети ME для списка модов…", COL_DIM); tickSpinner()
   local ok1, items = pcall(function() return ME and ME.getItemsInNetwork() or {} end)
@@ -167,8 +168,9 @@ local function buildCaches()
     st.damage = st.damage or f.damage
 
     local key   = (st.name or f.name or "") .. ":" .. tostring(st.damage or f.damage or 0)
-    local name = st.name
     local label = labelByKey[key] or st.label or st.name or "<?>"
+
+    local name = st.name
     local dmg   = st.damage
     local mod   = "unknown"
     if type(name)=="string" then
