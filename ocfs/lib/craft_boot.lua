@@ -177,10 +177,21 @@ local function buildCaches()
       local p = name:find(":"); if p and p>1 then mod = name:sub(1,p-1) end
     end
 
-    local row = { entry=entry, label=label, name=name, damage=dmg, mod=mod }
-    craftCache.rows[#craftCache.rows+1] = row
-    local bucket = craftCache.byMod[mod]; if not bucket then bucket={} ; craftCache.byMod[mod]=bucket end
-    bucket[#bucket+1] = row
+    local function goodLabel(lbl)
+      if not lbl or lbl=="" or lbl=="<?>" then return false end
+      if lbl=="tile.null.name" or lbl=="item.null.name" then return false end
+      if lbl:match("^tile%.[%w_]+%.name$") then return false end
+      if lbl:match("^item%.[%w_]+%.name$") then return false end
+      return true
+    end
+
+    -- ...после вычисления name,label,dmg,mod:
+    if goodLabel(label) then
+      local row = { entry=entry, label=label, name=name, damage=dmg, mod=mod }
+      craftCache.rows[#craftCache.rows+1] = row
+      local bucket = craftCache.byMod[mod]; if not bucket then bucket={} ; craftCache.byMod[mod]=bucket end
+      bucket[#bucket+1] = row
+    end
 
     if (i%50)==0 or i==total2 then
       progressBar(X+2, Y+7, W-4, (total2==0 and 1 or i/total2))

@@ -98,16 +98,23 @@ while true do
 
     elseif action == "dialog_ok" then
       local qty = tonumber(view.dialog.qty) or 1
-      local ok2, err = model.request_craft(view.dialog.item, qty)
+      local item = view.dialog.item
+      local ok2, err = model.request_craft(item, qty)
       if ok2 then
-        say("§aЗапущен крафт: §e" .. tostring(view.dialog.item.label or "<?>") .. " §7x§b" .. tostring(qty))
+        say("§aЗапрошен крафт: §e" .. tostring(item.label or "<?>") .. " §7x§b" .. tostring(qty))
+        view.close_dialog()
+        view.draw_shell("&d[Панель ME-крафта]")
+        reload_list()
+        local info = model.get_item_info(item); info.status = "запрошен x"..qty
+        view.render_info(info)
       else
         say("§cОшибка запуска крафта: §7" .. tostring(err))
+        -- покажем ошибку справа
+        local info = model.get_item_info(item); info.status = "ошибка: "..tostring(err)
+        view.render_info(info)
+        view.close_dialog()
       end
-      view.close_dialog()
-      view.draw_shell("&d[Панель ME-крафта]")
-      reload_list()
-      draw_info_for(nil)
+
 
     elseif action == "open_jobs" then
       local jobs = model.get_jobs()

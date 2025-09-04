@@ -159,6 +159,7 @@ function G.render_info(info)
     "&7Название (id): &8" .. tostring(info.name or "-"),
     "&7Damage: &8" .. tostring(info.damage or "-"),
   }
+  if info.status then table.insert(L, 2, "&aСтатус: &f" .. tostring(info.status)) end
   for i=1,#L do gui.text(x, y+i-1, L[i]) end
 end
 

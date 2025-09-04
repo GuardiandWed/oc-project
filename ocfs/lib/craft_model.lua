@@ -130,15 +130,26 @@ function M.get_craftables(query, opts)
 end
 
 function M.request_craft(craft_row, qty)
-  if not craft_row or not craft_row.entry then
-    return false, "bad craftable"
-  end
   qty = tonumber(qty) or 1
   if qty < 1 then qty = 1 end
-  local ok, res = pcall(function() return craft_row.entry.request(qty) end)
-  if not ok then return false, res end
+  if not craft_row then return false, "no craft row" end
+
+  local entry = craft_row.entry
+  if (not entry or type(entry)~="table" or not entry.request) and M.ME then
+    local okE, entries = pcall(function()
+      return M.ME.getCraftables({ name = craft_row.name, damage = craft_row.damage })
+    end)
+    if okE and type(entries)=="table" then entry = entries[1] end
+  end
+  if not entry or not entry.request then
+    return false, "craft entry not found"
+  end
+
+  local ok, res = pcall(function() return entry.request(qty) end)
+  if not ok then return false, tostring(res) end
   return true, res
 end
+
 
 function M.get_cpu_summary()
   if not M.ME then return { total=0, busy=0, list={} } end
