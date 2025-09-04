@@ -32,14 +32,30 @@ local bot = Chat.new{
 
 bot:start()
 
--- быстрый кеш модов (1 запрос ко всей сети)
+-- 1) моды из сети (быстро, 1 проход)
 model.rebuild_cache()
 view.set_mods(model.get_all_mods())
 
--- после загрузки GUI сразу требуем выбор модов
+-- 2) предзагрузка ВСЕХ крафтов в кеш с прогрессом
+view.open_loader("Подготовка списка крафтов…")
+model.build_craft_cache(function(done, total, label)
+  -- callback прорисовки: обновляем плашку ожидания
+  view.update_loader(done, total, label or "")
+  view.render_loader()
+end)
+view.close_loader()
+
+-- 3) сразу требуем выбор модов
 view.open_mods()
 view.render_mods()
+
 local firstRun = true
+
+view.open_loader("Применение фильтра…")
+view.update_loader(1,1,"")
+view.render_loader()
+os.sleep(0.05)
+view.close_loader()
 
 local function reload_list()
   local modSet = view.get_selected_mods_set()  -- { mod -> true }
@@ -54,7 +70,9 @@ local function redraw_modals()
   view.render_dialog()
   view.render_jobs()
   view.render_mods()
+  view.render_loader() -- NEW: поверх всего
 end
+
 
 local function draw_info_for(row)
   local info = model.get_item_info(row or {})

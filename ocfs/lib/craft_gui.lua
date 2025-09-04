@@ -35,8 +35,50 @@ G.btnJobs  = { x = 116-18, y = 2, w=10, h=1, label = "[Задания]" }
 G.dialog     = { visible=false, item=nil, qty="1", okBtn=nil, cancelBtn=nil, inputBox=nil }
 G.jobsDialog = { visible=false, jobs={}, closeBtn=nil, cancelHotspots={} }
 G.modsDialog = { visible=false, items={}, applyBtn=nil, cancelBtn=nil, toggleMap={} }
+G.loader = { visible=false, title="Загрузка…", done=0, total=0, label="" }
 
 -- ===== helpers =====
+-- ========== ЛОАДЕР (плашка ожидания с прогрессом) ==========
+G.loader = { visible=false, title="Загрузка…", done=0, total=0, label="" }
+
+function G.open_loader(title)
+  G.loader.visible = true
+  G.loader.title   = title or "Загрузка…"
+  G.loader.done, G.loader.total, G.loader.label = 0, 0, ""
+end
+
+function G.update_loader(done, total, label)
+  if not G.loader.visible then return end
+  G.loader.done  = tonumber(done) or 0
+  G.loader.total = tonumber(total) or 0
+  G.loader.label = tostring(label or "")
+end
+
+function G.close_loader()
+  G.loader.visible = false
+end
+
+local function drawProgressBar(x,y,w,ratio)
+  ratio = math.max(0, math.min(1, ratio or 0))
+  local full = math.floor(w * ratio)
+  gui.text(x, y, "[" .. string.rep("=", full) .. string.rep(" ", w - full) .. "]")
+end
+
+function G.render_loader()
+  if not G.loader.visible then return end
+  local W, H = 60, 7
+  local x,y = (centerBox(W,H))
+  gui.drawFrame(x,y,W,H, stripAmp(G.loader.title), gui.colors["border"])
+  local percent = 0
+  if (G.loader.total or 0) > 0 then
+    percent = G.loader.done / G.loader.total
+  end
+  gui.text(x+2, y+2, "&7Статус: &f"..ucut(G.loader.label or "", W-12))
+  drawProgressBar(x+2, y+4, W-4, percent)
+  gui.text(x+2, y+5, ("&8%3d%%  &7(%d/%d)"):format(math.floor(percent*100), G.loader.done or 0, G.loader.total or 0))
+end
+
+
 local function clearRect(x,y,w,h)
   for i=0,h-1 do gui.text(x, y+i, string.rep(" ", w)) end
 end
@@ -74,14 +116,12 @@ function G.draw_shell(title)
   gui.drawMain(title or "&d[Крафты ME]", gui.colors["border"], "2")
   gui.drawFrame(G.bounds.x, G.bounds.y, G.bounds.w, G.bounds.h, "Панель крафта", gui.colors["border"])
 
-  -- верхние кнопки
   local jlbl, slbl = "&b"..G.btnJobs.label, "&c"..G.btnStop.label
   gui.text(G.btnJobs.x, G.btnJobs.y, jlbl)
   gui.text(G.btnStop.x, G.btnStop.y, slbl)
   G.btnJobs.w = textWidth(jlbl)
   G.btnStop.w = textWidth(slbl)
 
-  -- поиск
   gui.text(G.searchBounds.x, G.searchBounds.y, "&7Поиск: ")
   clearRect(G.searchBounds.x + 8, G.searchBounds.y, G.searchBounds.w - 8, 1)
   local caret = G.focusSearch and "&f▌" or ""
@@ -90,27 +130,36 @@ function G.draw_shell(title)
   shown = ucut(shown, maxChars)
   gui.text(G.searchBounds.x + 8, G.searchBounds.y, "&f" .. shown .. caret)
 
-  -- строка фильтра модов (кратко)
+  -- краткое резюме выбранных модов
   clearRect(4, G.filtersY, 70, 1)
+  local selectedList = {}
+  if not G.modFilter.all then
+    for _,m in ipairs(G.allMods or {}) do
+      if G.modFilter.selected[m] then selectedList[#selectedList+1] = m end
+    end
+  end
   local modSummary
   if G.modFilter.all then
     modSummary = "Все"
   else
-    local list = {}
-    for _,m in ipairs(G.allMods or {}) do
-      if G.modFilter.selected[m] then list[#list+1] = m end
+    local n = #selectedList
+    if n == 0 then
+      modSummary = "—"
+    elseif n <= 2 then
+      modSummary = table.concat(selectedList, ", ")
+    else
+      modSummary = ("Выбрано: %d"):format(n)
     end
-    modSummary = (#list == 0) and "—" or table.concat(list, ", ")
   end
-  local modLabel = "&e[Моды: "..(modSummary or "—").."]"
+  local modLabel = "&e[Моды: "..modSummary.."]"
   gui.text(4, G.filtersY, modLabel)
   local wmod = textWidth(modLabel)
   G.modHotspot = { x=4, y=G.filtersY, w=wmod, h=1 }
 
-  -- рамки
   gui.drawFrame(G.listBounds.x-2,  G.listBounds.y-2,  G.listBounds.w+4,  G.listBounds.h+4,  "Доступно к крафту", gui.colors["border"])
   gui.drawFrame(G.infoBounds.x-2,  G.infoBounds.y-2,  G.infoBounds.w+4,  G.infoBounds.h+4,  "Информация",        gui.colors["border"])
 end
+
 
 function G.render_list(cpuSummary)
   local x,y,w,h = G.listBounds.x, G.listBounds.y, G.listBounds.w, G.listBounds.h

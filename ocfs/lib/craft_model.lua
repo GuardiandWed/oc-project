@@ -4,12 +4,50 @@ local component = require("component")
 local M = {}
 M.ME = component.isAvailable("me_controller") and component.me_controller or nil
 
--- кеш модов для быстрого старта
-M.cache = {
-  allMods = {},          -- массив строк
-  modsSet = {},          -- set: mod -> true
-  ts = 0
+
+-- ДО _raw_craftables вставь структуру кеша крафтов:
+M.cache = M.cache or {
+  allMods = {}, modsSet = {}, ts = 0
 }
+M.craftCache = {
+  rows = {},        -- { {entry, label, name, damage, mod}, ... }
+  byMod = {},       -- mod -> array of rows (ссылки на rows)
+  built = false
+}
+
+-- NEW: полная предзагрузка списка крафтов со стеком и модами
+function M.build_craft_cache(onProgress)
+  M.craftCache = { rows = {}, byMod = {}, built = false }
+  if not M.ME then return end
+
+  local ok, raw = pcall(function() return M.ME.getCraftables() end)
+  if not ok or type(raw) ~= "table" then return end
+
+  local total = #raw
+  for i = 1, total do
+    local entry = raw[i]
+    local st = _stackOf(entry) or {}
+    local name  = st.name
+    local row = {
+      entry  = entry,
+      label  = st.label or name or "<?>",
+      name   = name,
+      damage = st.damage,
+      mod    = _modFromName(name),
+    }
+    M.craftCache.rows[#M.craftCache.rows+1] = row
+    local m = row.mod or "unknown"
+    local bucket = M.craftCache.byMod[m]
+    if not bucket then bucket = {}; M.craftCache.byMod[m] = bucket end
+    bucket[#bucket+1] = row
+
+    if onProgress and (i % 25 == 0 or i == total) then
+      onProgress(i, total, row.label)
+    end
+  end
+  M.craftCache.built = true
+end
+
 
 local function _raw_craftables(filter)
   if not M.ME then return {} end
@@ -80,10 +118,36 @@ function M.get_craftables(query, opts)
   local result = {}
   if not M.ME then return result end
 
+  -- если кеш готов — фильтруем по нему
+  if M.craftCache and M.craftCache.built then
+    local src
+    if opts.modSet and next(opts.modSet) ~= nil then
+      -- собрать объединённый список по выбранным модам (из byMod)
+      src = {}
+      for mod,_ in pairs(opts.modSet) do
+        local bucket = M.craftCache.byMod[mod]
+        if bucket then
+          for i=1,#bucket do src[#src+1] = bucket[i] end
+        end
+      end
+    else
+      src = M.craftCache.rows
+    end
+
+    local q = query
+    for i = 1, #src do
+      local row = src[i]
+      if _match(row.label, q, false) then
+        result[#result+1] = row
+      end
+    end
+    return result
+  end
+
+  -- fallback: без кеша (не должен срабатывать после старта)
   local filter = (query and query ~= "") and { label = query } or nil
   local raw = _raw_craftables(filter)
-  local modSet = opts.modSet  -- может быть nil (значит «все»)
-
+  local modSet = opts.modSet
   for i = 1, #raw do
     local entry = raw[i]
     local st = _stackOf(entry) or {}
@@ -91,22 +155,13 @@ function M.get_craftables(query, opts)
     local name  = st.name
     local dmg   = st.damage
     local mod   = _modFromName(name)
-
-    -- поиск по подстроке + мод-фильтр
-    if _match(label, query, false) then
-      if (not modSet) or modSet[mod] then
-        result[#result+1] = {
-          entry  = entry,
-          label  = label,
-          name   = name,
-          damage = dmg,
-          mod    = mod,
-        }
-      end
+    if _match(label, query, false) and ((not modSet) or modSet[mod]) then
+      result[#result+1] = { entry=entry, label=label, name=name, damage=dmg, mod=mod }
     end
   end
   return result
 end
+
 
 function M.request_craft(craft_row, qty)
   if not craft_row or not craft_row.entry then
