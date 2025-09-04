@@ -50,12 +50,13 @@ function core.frame(x,y,w,h,col)
   local prev = {gpu.getForeground()}
   gpu.setForeground(col or core.theme.border)
   if w>=2 and h>=2 then
-    gpu.set(x, y,         "┌"..string.rep("─",w-2).."┐")
-    gpu.set(x, y+h-1,     "└"..string.rep("─",w-2).."┘")
-    for i=1,h-2 do
-      gpu.set(x,     y+i, "│")
-      gpu.set(x+w-1, y+i, "│")
-    end
+    local tl,tr,bl,br = "╭","╮","╰","╯"
+        gpu.set(x, y,         tl..string.rep("─",w-2)..tr)
+        gpu.set(x, y+h-1,     bl..string.rep("─",w-2)..br)
+        for i=1,h-2 do
+        gpu.set(x,     y+i, "│")
+        gpu.set(x+w-1, y+i, "│")
+        end
   end
   gpu.setForeground(table.unpack(prev))
 end

@@ -118,18 +118,18 @@ function Chat:_ensureHelp()
 end
 
 function Chat:_handle(nick, raw)
-  if not raw or raw:sub(1,#self.prefix) ~= self.prefix then
-    -- НЕ команда: простая привет/прощай логика для админов
-    if self.admins[nick] and self.chatBox then
-      local last = self._lastSeen[nick]
-      local now  = os.time()
-      if not last or (now - last) > 300 then  -- 5 минут не писал
-        self.chatBox.say("Привет, "..nick.."! Я здесь, если что. Напиши "..self.prefix.."help")
-      end
-      self._lastSeen[nick] = now
-    end
-    return false
-  end
+--   if not raw or raw:sub(1,#self.prefix) ~= self.prefix then
+--     -- НЕ команда: простая привет/прощай логика для админов
+--     if self.admins[nick] and self.chatBox then
+--       local last = self._lastSeen[nick]
+--       local now  = os.time()
+--       if not last or (now - last) > 300 then  -- 5 минут не писал
+--         self.chatBox.say("Привет, "..nick.."! Я здесь, если что. Напиши "..self.prefix.."help")
+--       end
+--       self._lastSeen[nick] = now
+--     end
+--     return false
+--   end
 
   local text  = raw:sub(#self.prefix+1)
   local parts = splitArgs(text)

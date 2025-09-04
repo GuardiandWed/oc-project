@@ -72,15 +72,17 @@ local function draw_sidebar()
 end
 
 local function restart_program()
+  if _G.__hg_bot then pcall(_G.__hg_bot.stop, _G.__hg_bot) end  -- <<< добавили
   core.clear()
   local f,err = loadfile("/home/hausegames.lua")
   if not f then
     gui.text(2, H-1, "&cОшибка загрузки: &f"..tostring(err))
     core.flush()
   else
-    f() -- перезапуск
+    f()
   end
 end
+
 
 local function draw_footer()
   local y = H - 3
@@ -89,7 +91,11 @@ local function draw_footer()
   })
   gui.button(28, y, 20, 1, " Выход из программы ", {
     bg = core.theme.danger,  fg = 0x000000,
-    onClick = function() core.shutdown() end
+    onClick = function()
+      if _G.__hg_bot then pcall(_G.__hg_bot.stop, _G.__hg_bot) end
+      core.shutdown()
+    end
+
   })
 end
 
@@ -109,6 +115,7 @@ render()
 local Chat = require("chatcmd")
 local bot = Chat.new{ prefix="@", name="Оператор", admins={"HauseMasters"} }
 bot:start()
+_G.__hg_bot = bot    -- <<< добавить одну строку
 
 
 while true do
