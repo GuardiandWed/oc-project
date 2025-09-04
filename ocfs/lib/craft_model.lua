@@ -1,22 +1,16 @@
 -- /home/craft_model.lua
-local component = require("component")
+local component    = require("component")
+local fs           = require("filesystem")
+local ser          = require("serialization")
 
 local M = {}
 M.ME = component.isAvailable("me_controller") and component.me_controller or nil
 
--- КЕШИ (заполняются craft_boot/run на старте)
-M.cache = {
-  allMods = {},
-  modsSet = {},
-  ts = 0
-}
-M.craftCache = {
-  rows = {},        -- { {entry, label, name, damage, mod}, ... }
-  byMod = {},       -- mod -> array of rows
-  built = false
-}
+-- КЕШИ
+M.cache = { allMods = {}, modsSet = {}, ts = 0 }
+M.craftCache = { rows = {}, byMod = {}, built = false }
 
--- Публичные сеттеры для предзагрузки
+-- ===== Предзагрузка (сеттеры) =====
 function M.set_all_mods(arr)
   M.cache.allMods, M.cache.modsSet = {}, {}
   for _,m in ipairs(arr or {}) do
@@ -33,55 +27,65 @@ function M.set_craft_cache(cache)
   cache = cache or {}
   M.craftCache.rows  = cache.rows or {}
   M.craftCache.byMod = cache.byMod or {}
-  M.craftCache.built = cache.built and true or ( (#M.craftCache.rows>0) )
+  M.craftCache.built = cache.built and true or (#(M.craftCache.rows or {}) > 0)
 end
 
 function M.get_all_mods()
   return M.cache.allMods or {}
 end
 
--- Фоллбек — если захотим пересобрать (не используется при нормальном старте)
-local function _raw_craftables(filter)
-  if not M.ME then return {} end
-  local ok, list = pcall(function() return M.ME.getCraftables(filter) end)
-  if not ok or type(list) ~= "table" then return {} end
-  return list
+-- ===== Дисковый кеш =====
+function M.save_cache(path)
+  path = path or "/home/data/craft_cache.lua"
+  local dir = path:match("^(.*)/[^/]+$")
+  if dir and not fs.exists(dir) then fs.makeDirectory(dir) end
+  local slim = {}
+  for i=1,#(M.craftCache.rows or {}) do
+    local r = M.craftCache.rows[i]
+    slim[#slim+1] = { name=r.name, damage=r.damage, label=r.label, mod=r.mod }
+  end
+  local f = io.open(path, "w"); if not f then return false, "cannot open file" end
+  f:write(ser.serialize({ rows=slim }))
+  f:close()
+  return true
 end
 
-local function _stackOf(entry)
-  local ok, st = pcall(entry.getItemStack, entry)
-  if not ok or type(st) ~= "table" then return nil end
-  return st
+function M.load_cache(path)
+  path = path or "/home/data/craft_cache.lua"
+  if not fs.exists(path) then return false, "no file" end
+  local f = io.open(path, "r"); if not f then return false, "cannot open" end
+  local s = f:read("*a"); f:close()
+  local ok, t = pcall(ser.unserialize, s)
+  if not ok or type(t)~="table" then return false, "bad format" end
+
+  M.craftCache.rows, M.craftCache.byMod = {}, {}
+  for _,r in ipairs(t.rows or {}) do
+    local mod = r.mod or "unknown"
+    local row = { entry=nil, label=r.label, name=r.name, damage=r.damage, mod=mod }
+    M.craftCache.rows[#M.craftCache.rows+1] = row
+    local b = M.craftCache.byMod[mod]; if not b then b={} ; M.craftCache.byMod[mod]=b end
+    b[#b+1] = row
+  end
+  M.craftCache.built = true
+  return true
 end
 
-local function _modFromName(name)
-  if not name then return "unknown" end
-  local i = name:find(":")
-  if not i or i <= 1 then return "unknown" end
-  return name:sub(1, i-1)
-end
-
-local function _match(hay, needle, exact)
+-- ===== Утилиты =====
+local function _match(hay, needle)
   if not needle or needle == "" then return true end
   hay    = tostring(hay or "")
   needle = tostring(needle)
-  if exact then
-    return hay:lower() == needle:lower()
-  else
-    return hay:lower():find(needle:lower(), 1, true) ~= nil
-  end
+  return hay:lower():find(needle:lower(), 1, true) ~= nil
 end
 
 local function _getItemRecord(name, damage)
-  if not M.ME then return nil end
+  if not M.ME or not name then return nil end
   local ok, items = pcall(function() return M.ME.getItemsInNetwork({ name = name, damage = damage }) end)
-  if ok and type(items)=="table" and items[1] then
-    return items[1]
-  end
+  if ok and type(items)=="table" and items[1] then return items[1] end
   return nil
 end
 
--- Основной источник теперь — кеш
+-- ===== Публичное API =====
 function M.get_craftables(query, opts)
   opts = opts or {}
   local result = {}
@@ -93,9 +97,7 @@ function M.get_craftables(query, opts)
       src = {}
       for mod,_ in pairs(opts.modSet) do
         local bucket = M.craftCache.byMod[mod]
-        if bucket then
-          for i=1,#bucket do src[#src+1] = bucket[i] end
-        end
+        if bucket then for i=1,#bucket do src[#src+1] = bucket[i] end end
       end
     else
       src = M.craftCache.rows
@@ -104,27 +106,9 @@ function M.get_craftables(query, opts)
     local q = query
     for i = 1, #src do
       local row = src[i]
-      if _match(row.label, q, false) then
-        result[#result+1] = row
-      end
+      if _match(row.label, q) then result[#result+1] = row end
     end
     return result
-  end
-
-  -- fallback (если кеша вдруг нет)
-  local filter = (query and query ~= "") and { label = query } or nil
-  local raw = _raw_craftables(filter)
-  local modSet = opts.modSet
-  for i = 1, #raw do
-    local entry = raw[i]
-    local st = _stackOf(entry) or {}
-    local label = st.label or st.name or "<?>"
-    local name  = st.name
-    local dmg   = st.damage
-    local mod   = _modFromName(name)
-    if _match(label, query, false) and ((not modSet) or modSet[mod]) then
-      result[#result+1] = { entry=entry, label=label, name=name, damage=dmg, mod=mod }
-    end
   end
   return result
 end
@@ -136,17 +120,17 @@ local function _resolve_entry(name, damage, label)
   local ok1, l1 = pcall(function() return M.ME.getCraftables({ name=name, damage=damage }) end)
   if ok1 and type(l1)=="table" and l1[1] then return l1[1] end
 
-  -- 2) name only (часто рецепты wildcard по метаданным)
+  -- 2) name only
   local ok2, l2 = pcall(function() return M.ME.getCraftables({ name=name }) end)
   if ok2 and type(l2)=="table" and l2[1] then return l2[1] end
 
-  -- 3) label (если интеграция поддерживает)
+  -- 3) label
   if label then
     local ok3, l3 = pcall(function() return M.ME.getCraftables({ label=label }) end)
     if ok3 and type(l3)=="table" and l3[1] then return l3[1] end
   end
 
-  -- 4) полный перебор (дорого, но надёжно)
+  -- 4) полный перебор
   local ok4, all = pcall(function() return M.ME.getCraftables() end)
   if ok4 and type(all)=="table" then
     for i=1,#all do
@@ -180,9 +164,6 @@ function M.request_craft(craft_row, qty)
   if not ok then return false, tostring(res) end
   return true, res
 end
-
-
-
 
 function M.get_cpu_summary()
   if not M.ME then return { total=0, busy=0, list={} } end
@@ -265,46 +246,5 @@ function M.cancel_job(id)
   if res == true then return true end
   return false, res
 end
-
-
-local fs  = require("filesystem")
-local ser = require("serialization")
-
-function M.save_cache(path)
-  path = path or "/home/data/craft_cache.lua"
-  local dir = path:match("^(.*)/[^/]+$")
-  if dir and not fs.exists(dir) then fs.makeDirectory(dir) end
-  local slim = {}
-  for i=1,#(M.craftCache.rows or {}) do
-    local r = M.craftCache.rows[i]
-    slim[#slim+1] = { name=r.name, damage=r.damage, label=r.label, mod=r.mod }
-  end
-  local f = io.open(path, "w")
-  if not f then return false, "cannot open file" end
-  f:write(ser.serialize({ rows=slim }))
-  f:close()
-  return true
-end
-
-function M.load_cache(path)
-  path = path or "/home/data/craft_cache.lua"
-  if not fs.exists(path) then return false, "no file" end
-  local f = io.open(path, "r"); if not f then return false, "cannot open" end
-  local s = f:read("*a"); f:close()
-  local ok, t = pcall(ser.unserialize, s)
-  if not ok or type(t)~="table" then return false, "bad format" end
-  M.craftCache.rows, M.craftCache.byMod = {}, {}
-  for _,r in ipairs(t.rows or {}) do
-    local mod = r.mod or "unknown"
-    local row = { entry=nil, label=r.label, name=r.name, damage=r.damage, mod=mod }
-    -- ленивое восстановление entry при запуске крафта (_resolve_entry)
-    M.craftCache.rows[#M.craftCache.rows+1] = row
-    local b = M.craftCache.byMod[mod]; if not b then b={} ; M.craftCache.byMod[mod]=b end
-    b[#b+1] = row
-  end
-  M.craftCache.built = true
-  return true
-end
-
 
 return M

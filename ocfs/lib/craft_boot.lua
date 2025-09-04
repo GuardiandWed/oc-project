@@ -8,7 +8,7 @@ local unicode   = require("unicode")
 
 local gpu = assert(component.gpu, "GPU required")
 
--- цвета из твоего инсталлер-стиля
+-- цвета
 local COL_BG     = 0x0A0F0A
 local COL_FRAME  = 0x0F1F0F
 local COL_TEXT   = 0xDDFFDD
@@ -95,8 +95,7 @@ local function buildCaches()
   local modsSet, modsArr = {}, {}
   local craftCache = { rows = {}, byMod = {}, built = false }
 
-  -- 1) Моды из всей сети
-    -- 1) Моды из всей сети
+  -- 1) Моды + список всех предметов
   writeStatus("Сканирование сети ME для списка модов…", COL_DIM); tickSpinner()
   local ok1, items = pcall(function() return ME and ME.getItemsInNetwork() or {} end)
   if not ok1 or type(items) ~= "table" then items = {} end
@@ -120,6 +119,7 @@ local function buildCaches()
   table.sort(modsArr)
   log("Найдено модов: "..tostring(#modsArr), COL_OK)
 
+  -- индекс локализованных меток
   local labelByKey = {}
   for i = 1, total1 do
     local it = items[i] or {}
@@ -128,39 +128,42 @@ local function buildCaches()
     end
   end
 
+  local function goodLabel(lbl)
+    if not lbl or lbl=="" or lbl=="<?>" then return false end
+    if lbl=="tile.null.name" or lbl=="item.null.name" then return false end
+    if lbl:match("^tile%.[%w_]+%.name$") then return false end
+    if lbl:match("^item%.[%w_]+%.name$") then return false end
+    return true
+  end
 
-
-    -- 2) Все крафтабельные шаблоны (через список предметов, без лимита 50)
+  -- 2) Собираем все крафты
   writeStatus("Загрузка всех крафтов из ME…", COL_TEXT); tickSpinner()
 
+  -- возьмём из инвентаря только крафтабельные позиции
   local craftableList = {}
-  -- пройдём по всем предметам в сети и выберем только крафтабельные
-  for i = 1, total1 do
+  for i=1,total1 do
     local it = items[i] or {}
     if it.isCraftable or it.is_craftable then
-      craftableList[#craftableList+1] = {name = it.name, damage = it.damage}
-    end
-    if (i%300)==0 or i==total1 then
-      progressBar(X+2, Y+7, W-4, (total1==0 and 1 or i/total1))
-      text(X+2, Y+8, ("Progress: %d%%  Scan items…"):format(total1==0 and 100 or math.floor(i*100/total1)), COL_DIM)
-      tickSpinner()
+      craftableList[#craftableList+1] = { name = it.name, damage = it.damage }
     end
   end
 
   local total2 = #craftableList
-  for i = 1, total2 do
+  for i=1,total2 do
     local f = craftableList[i]
+
+    -- резолв entry: exact name+damage -> name only
     local entry
     do
-      local ok1, t1 = pcall(function() return ME.getCraftables({ name=f.name, damage=f.damage }) end)
-      if ok1 and type(t1)=="table" and t1[1] then entry = t1[1] end
+      local okE1, t1 = pcall(function() return ME.getCraftables({ name=f.name, damage=f.damage }) end)
+      if okE1 and type(t1)=="table" and t1[1] then entry = t1[1] end
       if not entry then
-        local ok2, t2 = pcall(function() return ME.getCraftables({ name=f.name }) end)
-        if ok2 and type(t2)=="table" and t2[1] then entry = t2[1] end
+        local okE2, t2 = pcall(function() return ME.getCraftables({ name=f.name }) end)
+        if okE2 and type(t2)=="table" and t2[1] then entry = t2[1] end
       end
     end
 
-    -- попытаемся получить stack, чтобы узнать mod/label
+    -- stack, чтобы уточнить мод/лейбл
     local st = {}
     if entry and entry.getItemStack then
       local okS, stack = pcall(entry.getItemStack, entry)
@@ -172,22 +175,11 @@ local function buildCaches()
     local key   = (name or "") .. ":" .. tostring(dmg or 0)
     local label = labelByKey[key] or st.label or name or "<?>"
 
-    -- вычислим мод из name
     local mod = "unknown"
     if type(name)=="string" then
       local p = name:find(":"); if p and p>1 then mod = name:sub(1,p-1) end
     end
 
-    -- helper
-    local function goodLabel(lbl)
-      if not lbl or lbl=="" or lbl=="<?>" then return false end
-      if lbl=="tile.null.name" or lbl=="item.null.name" then return false end
-      if lbl:match("^tile%.[%w_]+%.name$") then return false end
-      if lbl:match("^item%.[%w_]+%.name$") then return false end
-      return true
-    end
-
-    -- в кеш кладём ТОЛЬКО с нормальным видимым названием; entry может быть nil (потом восстановим при запуске)
     if goodLabel(label) then
       local row = { entry=entry, label=label, name=name, damage=dmg, mod=mod }
       craftCache.rows[#craftCache.rows+1] = row
@@ -198,13 +190,13 @@ local function buildCaches()
     if (i%50)==0 or i==total2 then
       progressBar(X+2, Y+7, W-4, (total2==0 and 1 or i/total2))
       text(X+2, Y+8, ("Progress: %d%%  Craftables: %d/%d"):format(total2==0 and 100 or math.floor(i*100/total2), i, total2), COL_DIM)
-      log("Крафт: "..shorten(label, 52), COL_TEXT)
+      if label and goodLabel(label) then log("Крафт: "..shorten(label, 52), COL_TEXT) end
       tickSpinner()
     end
   end
+
   craftCache.built = true
   log("Готово. Всего крафтов: "..tostring(#craftCache.rows), COL_OK)
-
 
   return modsArr, craftCache
 end
@@ -212,20 +204,18 @@ end
 local M = {}
 
 function M.run(title)
-  local ok, mods, cache
-  local okRun, err = pcall(function()
+  local okRun, mods, cache
+  local okExec, err = pcall(function()
     drawChrome(title or "ME Cache Builder")
     writeStatus("Инициализация…", COL_DIM)
     mods, cache = buildCaches()
     writeStatus("Кеш построен. Моды: "..tostring(#mods).."  Крафтов: "..tostring(#(cache.rows or {})), COL_OK)
   end)
 
-  -- небольшая пауза, чтобы пользователь успел увидеть «OK»
   for _=1,12 do tickSpinner(); os.sleep(0.02) end
-  -- очистим экран перед GUI
   safeBG(oldBG); safeFG(oldFG); term.clear()
 
-  if okRun then
+  if okExec then
     return true, mods or {}, cache or { rows={}, byMod={}, built=true }
   else
     io.stderr:write("Cache builder error: "..tostring(err).."\n")
