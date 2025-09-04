@@ -1,6 +1,6 @@
 -- /lib/ugui.lua — адаптер к новому рендеру на базе ugui_core.lua
--- сохраняет твой API (&-цвета в text, drawMain, drawFrame),
--- + даёт доступ к расширенным виджетам Core.
+-- сохраняет старый API (&-цвета, drawMain, drawFrame) +
+-- прокидывает расширенные виджеты из ugui_core.
 
 local Core     = require("ugui_core")
 local gpu      = require("component").gpu
@@ -8,7 +8,7 @@ local unicode  = require("unicode")
 
 local M = {}
 
--- палитра для &0..&f (как в твоём старом ugui)
+-- палитра для &0..&f (как в старом ugui)
 local palette = {
   ["0"]=0x000000, ["1"]=0x0000AA, ["2"]=0x00AA00, ["3"]=0x00AAAA,
   ["4"]=0xAA0000, ["5"]=0xAA00AA, ["6"]=0xFFAA00, ["7"]=0xAAAAAA,
@@ -16,19 +16,34 @@ local palette = {
   ["c"]=0xFF5555, ["d"]=0xFF55FF, ["e"]=0xFFFF55, ["f"]=0xFFFFFF,
 }
 
--- прокинем тему наружу
+-- ВАЖНО: совместимость со старым кодом
+-- craft_gui.lua читает gui.colors.border и т.п.
+M.colors = {
+  border  = "9",  -- синий контур (как раньше)
+  text    = "f",
+  dim     = "7",
+  primary = "b",
+  danger  = "c",
+  warn    = "e",
+  ok      = "a",
+  shadow  = "0",
+  card    = "8",
+}
+-- чтобы при желании можно было брать rgb по коду
+M.palette = palette
+
+-- тема из Core
 M.theme = Core.theme
 
 ----------------------------------------------------------------
--- 1) Совместимые функции с твоего старого ugui.lua
+-- 1) Совместимые функции со старым ugui.lua
 ----------------------------------------------------------------
 
--- печать строки с &-цветами через буфер Core (без прямых gpu.set)
+-- печать строки с &-цветами через буфер Core
 function M.text(x, y, str)
   if not str or str == "" then return end
-  local cx = x
   local curColor = M.theme.text
-  local i = 1
+  local i, cx = 1, x
   while i <= #str do
     local ch = str:sub(i,i)
     if ch == "&" and i < #str then
@@ -36,7 +51,7 @@ function M.text(x, y, str)
       curColor = palette[c] or curColor
       i = i + 2
     else
-      -- печатаем посимвольно (unicode-safe)
+      -- unicode-safe: один символ
       local uch = unicode.sub(str, unicode.len(str:sub(1,i-1))+1, unicode.len(str:sub(1,i-1))+1)
       Core.text(cx, y, uch, curColor)
       cx = cx + 1
@@ -45,32 +60,28 @@ function M.text(x, y, str)
   end
 end
 
--- простая шапка (линия и заголовок)
+-- верхняя линия + заголовок
 function M.drawMain(title, borderCode, bgCode)
-  local w, h = gpu.getResolution()
-  local border = palette[borderCode or "9"] or 0x777777
-  -- линия сверху
+  local w = select(1, gpu.getResolution())
+  local border = palette[borderCode or M.colors.border] or 0x777777
   Core.text(1, 1, string.rep("─", w), border)
-  -- заголовок
   if title and title ~= "" then
     M.text(2, 1, title)
   end
 end
 
--- рамка box-drawing + заголовок в [ ]
+-- рамка с легким фоном и заголовком в [ ]
 function M.drawFrame(x, y, w, h, title, borderCode)
-  local col = palette[borderCode or "9"] or 0x777777
-  -- фон внутри рамки лёгкий
+  local col = palette[borderCode or M.colors.border] or 0x777777
   Core.rect(x, y, w, h, M.theme.card)
   Core.frame(x, y, w, h, col)
   if title and title ~= "" then
-    local cap = "["..title.."]"
-    M.text(x+2, y, cap)
+    M.text(x+2, y, "["..title.."]")
   end
 end
 
 ----------------------------------------------------------------
--- 2) Расширенный API (делегирование в Core) — можно использовать в новом коде
+-- 2) Делегирование в Core (расширенный API)
 ----------------------------------------------------------------
 function M.clear(bg)                     Core.clear(bg or M.theme.bg) end
 function M.flush()                       Core.flush() end
@@ -88,13 +99,10 @@ function M.button(x,y,w,h,label,opts)
   b.id = opts.id
   return b
 end
--- вертикальный индикатор/прогресс-бар
 function M.vbar(x,y,h,value,min,max,col,back)
   Core.vbar(x,y,h,value,min,max,col,back)
 end
--- лог-панель
 function M.log(x,y,w,h,lines) Core.logpane(x,y,w,h, lines or {}) end
--- хит-тест
 function M.inBounds(ctrl, cx, cy) return Core.inBounds(ctrl, cx, cy) end
 
 return M
