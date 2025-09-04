@@ -4,51 +4,43 @@ local component = require("component")
 local M = {}
 M.ME = component.isAvailable("me_controller") and component.me_controller or nil
 
-
--- ДО _raw_craftables вставь структуру кеша крафтов:
-M.cache = M.cache or {
-  allMods = {}, modsSet = {}, ts = 0
+-- КЕШИ (заполняются craft_boot/run на старте)
+M.cache = {
+  allMods = {},
+  modsSet = {},
+  ts = 0
 }
 M.craftCache = {
   rows = {},        -- { {entry, label, name, damage, mod}, ... }
-  byMod = {},       -- mod -> array of rows (ссылки на rows)
+  byMod = {},       -- mod -> array of rows
   built = false
 }
 
--- NEW: полная предзагрузка списка крафтов со стеком и модами
-function M.build_craft_cache(onProgress)
-  M.craftCache = { rows = {}, byMod = {}, built = false }
-  if not M.ME then return end
-
-  local ok, raw = pcall(function() return M.ME.getCraftables() end)
-  if not ok or type(raw) ~= "table" then return end
-
-  local total = #raw
-  for i = 1, total do
-    local entry = raw[i]
-    local st = _stackOf(entry) or {}
-    local name  = st.name
-    local row = {
-      entry  = entry,
-      label  = st.label or name or "<?>",
-      name   = name,
-      damage = st.damage,
-      mod    = _modFromName(name),
-    }
-    M.craftCache.rows[#M.craftCache.rows+1] = row
-    local m = row.mod or "unknown"
-    local bucket = M.craftCache.byMod[m]
-    if not bucket then bucket = {}; M.craftCache.byMod[m] = bucket end
-    bucket[#bucket+1] = row
-
-    if onProgress and (i % 25 == 0 or i == total) then
-      onProgress(i, total, row.label)
+-- Публичные сеттеры для предзагрузки
+function M.set_all_mods(arr)
+  M.cache.allMods, M.cache.modsSet = {}, {}
+  for _,m in ipairs(arr or {}) do
+    if m and not M.cache.modsSet[m] then
+      M.cache.modsSet[m] = true
+      M.cache.allMods[#M.cache.allMods+1] = m
     end
   end
-  M.craftCache.built = true
+  table.sort(M.cache.allMods)
+  M.cache.ts = os.time()
 end
 
+function M.set_craft_cache(cache)
+  cache = cache or {}
+  M.craftCache.rows  = cache.rows or {}
+  M.craftCache.byMod = cache.byMod or {}
+  M.craftCache.built = cache.built and true or ( (#M.craftCache.rows>0) )
+end
 
+function M.get_all_mods()
+  return M.cache.allMods or {}
+end
+
+-- Фоллбек — если захотим пересобрать (не используется при нормальном старте)
 local function _raw_craftables(filter)
   if not M.ME then return {} end
   local ok, list = pcall(function() return M.ME.getCraftables(filter) end)
@@ -89,40 +81,15 @@ local function _getItemRecord(name, damage)
   return nil
 end
 
--- построй список модов один раз из всей сети
-function M.rebuild_cache()
-  M.cache = { allMods = {}, modsSet = {}, ts = os.time() }
-  if not M.ME then return end
-  local ok, items = pcall(function() return M.ME.getItemsInNetwork() end)
-  if not ok or type(items) ~= "table" then return end
-  local set = {}
-  for i=1,#items do
-    local it = items[i] or {}
-    local name = it.name or (it.item and it.item.name)  -- иногда структура разная
-    local mod = _modFromName(name)
-    if mod ~= "unknown" then set[mod] = true end
-  end
-  local arr = {}
-  for m,_ in pairs(set) do arr[#arr+1] = m end
-  table.sort(arr)
-  M.cache.allMods = arr
-  M.cache.modsSet = set
-end
-
-function M.get_all_mods()
-  return M.cache.allMods or {}
-end
-
+-- Основной источник теперь — кеш
 function M.get_craftables(query, opts)
   opts = opts or {}
   local result = {}
   if not M.ME then return result end
 
-  -- если кеш готов — фильтруем по нему
   if M.craftCache and M.craftCache.built then
     local src
     if opts.modSet and next(opts.modSet) ~= nil then
-      -- собрать объединённый список по выбранным модам (из byMod)
       src = {}
       for mod,_ in pairs(opts.modSet) do
         local bucket = M.craftCache.byMod[mod]
@@ -144,7 +111,7 @@ function M.get_craftables(query, opts)
     return result
   end
 
-  -- fallback: без кеша (не должен срабатывать после старта)
+  -- fallback (если кеша вдруг нет)
   local filter = (query and query ~= "") and { label = query } or nil
   local raw = _raw_craftables(filter)
   local modSet = opts.modSet
@@ -161,7 +128,6 @@ function M.get_craftables(query, opts)
   end
   return result
 end
-
 
 function M.request_craft(craft_row, qty)
   if not craft_row or not craft_row.entry then

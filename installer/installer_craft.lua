@@ -14,6 +14,7 @@ local DEFAULT_FILES = {
   "lib/craft_gui.lua",
   "lib/craft_model.lua",
   "lib/ugui.lua",
+  "lib/craft_boot.lua",
 }
 
 local APP_TITLE   = "OCFS — Installer"

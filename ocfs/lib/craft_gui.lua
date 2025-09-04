@@ -18,71 +18,37 @@ G.craftables   = {}
 G.rowMap       = {}
 G.focusSearch  = false
 
--- список всех модов приходит извне
-G.allMods      = {}   -- массив строк
+-- моды (получаем извне)
+G.allMods = {}
 
--- фильтр по модам (мультивыбор)
+-- фильтр по модам (мультивыбор + страницы)
 G.modFilter = {
   selected = {},     -- set: mod -> true
   all      = false,  -- если true — игнорировать selected
+}
+G.modsDialog = {
+  visible=false,
+  page = 1,
+  perPage = 14,
+  items = {},        -- кэш имен модов (из allMods)
+  toggleMap = {},
+  btnPrev=nil, btnNext=nil, applyBtn=nil, cancelBtn=nil
 }
 
 -- верхние кнопки
 G.btnStop  = { x = 116-8,  y = 2, w=8,  h=1, label = "[Стоп]" }
 G.btnJobs  = { x = 116-18, y = 2, w=10, h=1, label = "[Задания]" }
 
--- модалки
+-- модалка крафта
 G.dialog     = { visible=false, item=nil, qty="1", okBtn=nil, cancelBtn=nil, inputBox=nil }
+-- модалка заданий
 G.jobsDialog = { visible=false, jobs={}, closeBtn=nil, cancelHotspots={} }
-G.modsDialog = { visible=false, items={}, applyBtn=nil, cancelBtn=nil, toggleMap={} }
-G.loader = { visible=false, title="Загрузка…", done=0, total=0, label="" }
 
 -- ===== helpers =====
--- ========== ЛОАДЕР (плашка ожидания с прогрессом) ==========
-G.loader = { visible=false, title="Загрузка…", done=0, total=0, label="" }
-
-function G.open_loader(title)
-  G.loader.visible = true
-  G.loader.title   = title or "Загрузка…"
-  G.loader.done, G.loader.total, G.loader.label = 0, 0, ""
-end
-
-function G.update_loader(done, total, label)
-  if not G.loader.visible then return end
-  G.loader.done  = tonumber(done) or 0
-  G.loader.total = tonumber(total) or 0
-  G.loader.label = tostring(label or "")
-end
-
-function G.close_loader()
-  G.loader.visible = false
-end
-
-local function drawProgressBar(x,y,w,ratio)
-  ratio = math.max(0, math.min(1, ratio or 0))
-  local full = math.floor(w * ratio)
-  gui.text(x, y, "[" .. string.rep("=", full) .. string.rep(" ", w - full) .. "]")
-end
-
-function G.render_loader()
-  if not G.loader.visible then return end
-  local W, H = 60, 7
-  local x,y = (centerBox(W,H))
-  gui.drawFrame(x,y,W,H, stripAmp(G.loader.title), gui.colors["border"])
-  local percent = 0
-  if (G.loader.total or 0) > 0 then
-    percent = G.loader.done / G.loader.total
-  end
-  gui.text(x+2, y+2, "&7Статус: &f"..ucut(G.loader.label or "", W-12))
-  drawProgressBar(x+2, y+4, W-4, percent)
-  gui.text(x+2, y+5, ("&8%3d%%  &7(%d/%d)"):format(math.floor(percent*100), G.loader.done or 0, G.loader.total or 0))
-end
-
-
 local function clearRect(x,y,w,h)
   for i=0,h-1 do gui.text(x, y+i, string.rep(" ", w)) end
 end
-local function centerBox(W,H)
+local function getCenter(W,H)
   local sw, sh = gpu.getResolution()
   local x = math.floor((sw - W)/2)
   local y = math.floor((sh - H)/2)
@@ -98,17 +64,16 @@ local function ucut(s, max) if unicode.len(s) <= max then return s end return un
 -- API для main.lua
 function G.set_mods(list)
   G.allMods = list or {}
-  -- по умолчанию ничего не выбрано; пользователь обязан выбрать
+  table.sort(G.allMods)
   G.modFilter.selected = {}
   G.modFilter.all = false
+  G.modsDialog.page = 1
 end
 function G.get_selected_mods_set()
-  if G.modFilter.all then return nil end -- nil = без фильтра (все)
+  if G.modFilter.all then return nil end
   local s = G.modFilter.selected or {}
-  local has = false
-  for _,__ in pairs(s) do has = true break end
-  if not has then return {} end
-  return s
+  for _,__ in pairs(s) do return s end
+  return {}  -- пустой выбор
 end
 
 -- ===== каркас =====
@@ -130,7 +95,7 @@ function G.draw_shell(title)
   shown = ucut(shown, maxChars)
   gui.text(G.searchBounds.x + 8, G.searchBounds.y, "&f" .. shown .. caret)
 
-  -- краткое резюме выбранных модов
+  -- краткое резюме выбранных модов: 1–2 имени, иначе «Выбрано: N»
   clearRect(4, G.filtersY, 70, 1)
   local selectedList = {}
   if not G.modFilter.all then
@@ -143,13 +108,9 @@ function G.draw_shell(title)
     modSummary = "Все"
   else
     local n = #selectedList
-    if n == 0 then
-      modSummary = "—"
-    elseif n <= 2 then
-      modSummary = table.concat(selectedList, ", ")
-    else
-      modSummary = ("Выбрано: %d"):format(n)
-    end
+    if n == 0 then modSummary = "—"
+    elseif n <= 2 then modSummary = table.concat(selectedList, ", ")
+    else modSummary = ("Выбрано: %d"):format(n) end
   end
   local modLabel = "&e[Моды: "..modSummary.."]"
   gui.text(4, G.filtersY, modLabel)
@@ -160,7 +121,7 @@ function G.draw_shell(title)
   gui.drawFrame(G.infoBounds.x-2,  G.infoBounds.y-2,  G.infoBounds.w+4,  G.infoBounds.h+4,  "Информация",        gui.colors["border"])
 end
 
-
+-- список
 function G.render_list(cpuSummary)
   local x,y,w,h = G.listBounds.x, G.listBounds.y, G.listBounds.w, G.listBounds.h
   clearRect(x,y,w,h)
@@ -212,7 +173,7 @@ function G.close_dialog() G.dialog.visible=false; G.dialog.item=nil end
 function G.render_dialog()
   if not G.dialog.visible or not G.dialog.item then return end
   local W,H = 48,10
-  local x,y = centerBox(W,H)
+  local x,y = getCenter(W,H)
   gui.drawFrame(x,y,W,H,"Запуск крафта", gui.colors["border"])
   local label = G.dialog.item.label or "<?>"
   gui.text(x+2, y+2, "&fПредмет: &b" .. label)
@@ -248,7 +209,7 @@ function G.render_jobs()
   if not G.jobsDialog.visible then return end
   local W = 68
   local H = math.max(6, math.min(20, 4 + #G.jobsDialog.jobs))
-  local x,y = centerBox(W,H)
+  local x,y = getCenter(W,H)
   gui.drawFrame(x,y,W,H,"Активные задания", gui.colors["border"])
 
   local closeLbl = "&c[Закрыть]"
@@ -276,17 +237,10 @@ function G.render_jobs()
   end
 end
 
--- ===== модалка выбора модов =====
+-- ===== модалка выбора модов (с пагинацией) =====
 local function buildModsDialog()
-  G.modsDialog.items = {}
-  G.modsDialog.toggleMap = {}
-  -- список модов из всей сети
-  for _,mod in ipairs(G.allMods or {}) do
-    table.insert(G.modsDialog.items, { mod=mod, title=mod })
-  end
-  -- служебные пункты
-  table.insert(G.modsDialog.items, { mod="__ALL__",   title="Выбрать все" })
-  table.insert(G.modsDialog.items, { mod="__NONE__",  title="Снять выбор" })
+  G.modsDialog.items = G.allMods or {}
+  if G.modsDialog.page < 1 then G.modsDialog.page = 1 end
 end
 
 function G.open_mods()
@@ -298,42 +252,95 @@ function G.close_mods() G.modsDialog.visible=false end
 function G.render_mods()
   if not G.modsDialog.visible then return end
   local items = G.modsDialog.items or {}
-  local W = 44
-  local H = math.max(8, math.min(26, 5 + #items))
-  local x,y = centerBox(W,H)
+  local per   = G.modsDialog.perPage
+  local pages = math.max(1, math.ceil(#items / per))
+  if G.modsDialog.page > pages then G.modsDialog.page = pages end
+  local page  = G.modsDialog.page
+
+  local W = 54
+  local H = math.max(10, math.min(28, 7 + per))
+  local x,y = getCenter(W,H)
   gui.drawFrame(x,y,W,H,"Фильтр по модам", gui.colors["border"])
+
+  -- навигация страниц
+  local nav = ("&7Страница: &f%d/%d  &8[<]  [>]"):format(page, pages)
+  gui.text(x+2, y, nav)
+  local navW = textWidth(nav)
+  G.modsDialog.btnPrev = { x=x+2 + textWidth("&7Страница: &f"..page.."/"..pages.."  &8"), y=y, w=textWidth("[<]"), h=1 }
+  G.modsDialog.btnNext = { x=G.modsDialog.btnPrev.x + textWidth("[<]  "), y=y, w=textWidth("[>]"), h=1 }
+
+  local start = (page-1)*per + 1
+  local finish = math.min(#items, start + per - 1)
 
   local rowY = y+2
   G.modsDialog.toggleMap = {}
-  for i,it in ipairs(items) do
-    local state
-    if it.mod == "__ALL__" then
-      state = (G.modFilter.all or false) and "x" or " "
-    elseif it.mod == "__NONE__" then
-      state = " "
-    else
-      state = (not G.modFilter.all and G.modFilter.selected[it.mod]) and "x" or " "
-    end
-    local line = string.format("&f[%s] &b%s", state, it.title)
+  for i=start,finish do
+    local mod = items[i]
+    local state = (not G.modFilter.all and G.modFilter.selected[mod]) and "x" or " "
+    local line = string.format("&f[%s] &b%s", state, mod)
     gui.text(x+2, rowY, line)
     local w = 2 + textWidth(line)
-    local hs = { x=x+2, y=rowY, w=w, h=1, mod=it.mod }
+    local hs = { x=x+2, y=rowY, w=w, h=1, mod=mod }
     table.insert(G.modsDialog.toggleMap, hs)
     rowY = rowY + 1
   end
 
+  -- служебные кнопки
+  local allLbl, noneLbl = "&e[Выбрать все]", "&7[Снять выбор]"
+  local bw1, bw2 = textWidth(allLbl), textWidth(noneLbl)
+  gui.text(x+2, y+H-3, allLbl)
+  gui.text(x+2 + bw1 + 2, y+H-3, noneLbl)
+  G.modsDialog.btnAll  = { x=x+2, y=y+H-3, w=bw1, h=1 }
+  G.modsDialog.btnNone = { x=x+2 + bw1 + 2, y=y+H-3, w=bw2, h=1 }
+
   local applyLbl, cancelLbl = "&a[Применить]", "&c[Отмена]"
-  local bw1, bw2 = textWidth(applyLbl), textWidth(cancelLbl)
+  local bwA, bwC = textWidth(applyLbl), textWidth(cancelLbl)
   local by = y + H - 2
-  local bx2 = x + W - bw2 - 2
-  local bx1 = bx2 - bw1 - 2
-  G.modsDialog.applyBtn  = { x=bx1, y=by, w=bw1, h=1 }
-  G.modsDialog.cancelBtn = { x=bx2, y=by, w=bw2, h=1 }
+  local bx2 = x + W - bwC - 2
+  local bx1 = bx2 - bwA - 2
+  G.modsDialog.applyBtn  = { x=bx1, y=by, w=bwA, h=1 }
+  G.modsDialog.cancelBtn = { x=bx2, y=by, w=bwC, h=1 }
   gui.text(bx1, by, applyLbl)
   gui.text(bx2, by, cancelLbl)
 end
 
--- ===== обработчики событий =====
+-- ===== ЛОАДЕР (оверлей «ожидайте») =====
+G.loader = { visible=false, title="Загрузка…", done=0, total=0, label="" }
+
+function G.open_loader(title)
+  G.loader.visible = true
+  G.loader.title   = title or "Загрузка…"
+  G.loader.done, G.loader.total, G.loader.label = 0, 0, ""
+end
+function G.update_loader(done, total, label)
+  if not G.loader.visible then return end
+  G.loader.done  = tonumber(done) or 0
+  G.loader.total = tonumber(total) or 0
+  G.loader.label = tostring(label or "")
+end
+function G.close_loader() G.loader.visible = false end
+
+local function drawProgressBar(x,y,w,ratio)
+  ratio = math.max(0, math.min(1, ratio or 0))
+  local full = math.floor(w * ratio)
+  gui.text(x, y, "[" .. string.rep("=", full) .. string.rep(" ", w - full) .. "]")
+end
+
+function G.render_loader()
+  if not G.loader.visible then return end
+  local W, H = 60, 7
+  local x,y = getCenter(W,H)
+  gui.drawFrame(x,y,W,H, stripAmp(G.loader.title), gui.colors["border"])
+  local percent = 0
+  if (G.loader.total or 0) > 0 then
+    percent = G.loader.done / G.loader.total
+  end
+  gui.text(x+2, y+2, "&7Статус: &f"..ucut(G.loader.label or "", W-12))
+  drawProgressBar(x+2, y+4, W-4, percent)
+  gui.text(x+2, y+5, ("&8%3d%%  &7(%d/%d)"):format(math.floor(percent*100), G.loader.done or 0, G.loader.total or 0))
+end
+
+-- ===== обработчики =====
 function G.handle_touch(screen, tx, ty)
   -- верхние кнопки
   if pointIn(tx,ty,G.btnJobs) then return "open_jobs" end
@@ -371,33 +378,42 @@ function G.handle_touch(screen, tx, ty)
 
   -- модалка модов
   if G.modsDialog.visible then
+    -- навигация страниц
+    if pointIn(tx,ty,G.modsDialog.btnPrev) then
+      G.modsDialog.page = math.max(1, G.modsDialog.page - 1)
+      return "mods_toggle"
+    elseif pointIn(tx,ty,G.modsDialog.btnNext) then
+      local pages = math.max(1, math.ceil(#(G.modsDialog.items or {}) / G.modsDialog.perPage))
+      G.modsDialog.page = math.min(pages, G.modsDialog.page + 1)
+      return "mods_toggle"
+    end
+    -- выбрать все / снять выбор
+    if pointIn(tx,ty,G.modsDialog.btnAll) then
+      G.modFilter.all = true
+      G.modFilter.selected = {}
+      return "mods_toggle"
+    elseif pointIn(tx,ty,G.modsDialog.btnNone) then
+      G.modFilter.all = false
+      G.modFilter.selected = {}
+      return "mods_toggle"
+    end
+    -- чекбоксы
+    for _,hs in ipairs(G.modsDialog.toggleMap or {}) do
+      if pointIn(tx,ty,hs) then
+        G.modFilter.all = false
+        G.modFilter.selected[hs.mod] = not G.modFilter.selected[hs.mod]
+        return "mods_toggle"
+      end
+    end
+    -- кнопки применить/отмена
     if pointIn(tx,ty,G.modsDialog.applyBtn) then
       return "mods_apply"
     elseif pointIn(tx,ty,G.modsDialog.cancelBtn) then
       G.close_mods()
       return "mods_cancel"
-    else
-      for _,hs in ipairs(G.modsDialog.toggleMap or {}) do
-        if pointIn(tx,ty,hs) then
-          if hs.mod == "__ALL__" then
-            -- выбрать все
-            G.modFilter.all = true
-            G.modFilter.selected = {}
-          elseif hs.mod == "__NONE__" then
-            -- снять выбор (вкл. ручной выбор)
-            G.modFilter.all = false
-            G.modFilter.selected = {}
-          else
-            -- ручной мультивыбор
-            G.modFilter.all = false
-            G.modFilter.selected[hs.mod] = not G.modFilter.selected[hs.mod]
-          end
-          return "mods_toggle"
-        end
-      end
-      G.close_mods()
-      return "mods_cancel"
     end
+    -- клик мимо — не закрываем, остаёмся в модалке
+    return nil
   end
 
   -- модовый хот-спот
@@ -434,6 +450,14 @@ function G.handle_key_down(ch, code)
   -- модалка модов
   if G.modsDialog.visible then
     if code == 1 then G.close_mods(); return "mods_cancel" end
+    if code == 203 then  -- LEFT
+      G.modsDialog.page = math.max(1, G.modsDialog.page - 1)
+      return "mods_toggle"
+    elseif code == 205 then -- RIGHT
+      local pages = math.max(1, math.ceil(#(G.modsDialog.items or {}) / G.modsDialog.perPage))
+      G.modsDialog.page = math.min(pages, G.modsDialog.page + 1)
+      return "mods_toggle"
+    end
   end
 
   -- модалка крафта
@@ -445,16 +469,16 @@ function G.handle_key_down(ch, code)
       end
       if G.dialog.qty == "" then G.dialog.qty = "0" end
       return "dialog_qty_change"
-    elseif code == 14 then -- backspace
+    elseif code == 14 then
       if #G.dialog.qty > 1 then
         G.dialog.qty = G.dialog.qty:sub(1, -2)
       else
         G.dialog.qty = "1"
       end
       return "dialog_qty_change"
-    elseif code == 28 then -- Enter
+    elseif code == 28 then
       return "dialog_ok"
-    elseif code == 1 then  -- Esc
+    elseif code == 1 then
       G.close_dialog()
       return "dialog_cancel"
     end
@@ -466,14 +490,14 @@ function G.handle_key_down(ch, code)
     if ch and ch >= 32 then
       G.searchText = G.searchText .. unicode.char(ch)
       return "search_change"
-    elseif code == 14 then -- backspace
+    elseif code == 14 then
       if unicode.len(G.searchText) > 0 then
         G.searchText = unicode.sub(G.searchText, 1, unicode.len(G.searchText)-1)
         return "search_change"
       end
-    elseif code == 28 then -- Enter
+    elseif code == 28 then
       return "search_submit"
-    elseif code == 1 then -- Esc
+    elseif code == 1 then
       G.focusSearch = false
       return "search_blur"
     end

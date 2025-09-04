@@ -8,6 +8,7 @@ local chatBox   = component.isAvailable("chat_box") and component.chat_box or ni
 
 local view      = require("craft_gui")
 local model     = require("craft_model")
+local boot      = require("craft_boot")   -- НОВЫЙ: экран предзагрузки кеша
 
 local function say(msg)
   if chatBox then pcall(function() chatBox.say(msg) end) end
@@ -19,48 +20,24 @@ if gpu then
   pcall(function() gpu.setForeground(0xFFFFFF) end)
 end
 
+-- 1) предзагрузка кеша (моды + все крафты) с красивым экраном
+local ok, mods, craftCache = boot.run("ME Cache Builder")
+if ok then
+  model.set_all_mods(mods or {})
+  model.set_craft_cache(craftCache or {})
+else
+  -- даже если не получилось, продолжим с пустым кешем (GUI всё равно поднимется)
+  model.set_all_mods({})
+  model.set_craft_cache({})
+end
+
+-- 2) GUI
+view.set_mods(model.get_all_mods())
 view.draw_shell("&d[Панель ME-крафта]")
 
-local Chat = require("chatcmd")
-
--- создаём чат-обработчик
-local bot = Chat.new{
-  prefix = "@",
-  name   = "Оператор",
-  admins = {"HauseMasters"} -- твой ник
-}
-
-bot:start()
-
--- 1) моды из сети (быстро, 1 проход)
-model.rebuild_cache()
-view.set_mods(model.get_all_mods())
-
--- 2) предзагрузка ВСЕХ крафтов в кеш с прогрессом
-view.open_loader("Подготовка списка крафтов…")
-model.build_craft_cache(function(done, total, label)
-  -- callback прорисовки: обновляем плашку ожидания
-  view.update_loader(done, total, label or "")
-  view.render_loader()
-end)
-view.close_loader()
-
--- 3) сразу требуем выбор модов
-view.open_mods()
-view.render_mods()
-
-local firstRun = true
-
-view.open_loader("Применение фильтра…")
-view.update_loader(1,1,"")
-view.render_loader()
-os.sleep(0.05)
-view.close_loader()
-
 local function reload_list()
-  local modSet = view.get_selected_mods_set()  -- { mod -> true }
+  local modSet = view.get_selected_mods_set()  -- nil = все, {} = ничего
   local search = view.searchText
-  -- фильтра-плашки убраны, оставляем только поиск и моды
   view.craftables = model.get_craftables(search, { modSet = modSet })
   local cpu = model.get_cpu_summary()
   view.render_list(cpu)
@@ -70,16 +47,18 @@ local function redraw_modals()
   view.render_dialog()
   view.render_jobs()
   view.render_mods()
-  view.render_loader() -- NEW: поверх всего
+  view.render_loader() -- оверлей лоадера (используется кратко при применении фильтра)
 end
-
 
 local function draw_info_for(row)
   local info = model.get_item_info(row or {})
   view.render_info(info)
 end
 
--- пока моды не выбраны — не грузим список
+-- сразу требуем выбор модов
+view.open_mods()
+view.render_mods()
+local firstRun = true
 draw_info_for(nil)
 
 while true do
@@ -104,8 +83,8 @@ while true do
 
     elseif action == "dialog_ok" then
       local qty = tonumber(view.dialog.qty) or 1
-      local ok, err = model.request_craft(view.dialog.item, qty)
-      if ok then
+      local ok2, err = model.request_craft(view.dialog.item, qty)
+      if ok2 then
         say("§aЗапущен крафт: §e" .. tostring(view.dialog.item.label or "<?>") .. " §7x§b" .. tostring(qty))
       else
         say("§cОшибка запуска крафта: §7" .. tostring(err))
@@ -121,9 +100,9 @@ while true do
       view.render_jobs()
 
     elseif type(action)=="table" and action.action=="job_cancel" then
-      local ok, err = model.cancel_job(action.id)
-      if ok then say("§eЗадание отменено: §7"..tostring(action.id))
-      else       say("§cНе удалось отменить: §7"..tostring(err)) end
+      local ok2, err = model.cancel_job(action.id)
+      if ok2 then say("§eЗадание отменено: §7"..tostring(action.id))
+      else        say("§cНе удалось отменить: §7"..tostring(err)) end
       local jobs = model.get_jobs()
       view.open_jobs(jobs)
       view.render_jobs()
@@ -136,7 +115,6 @@ while true do
       view.render_mods()
 
     elseif action == "mods_cancel" then
-      -- во время первичного запуска отменять нельзя — требуем выбор
       if firstRun then
         view.open_mods()
         view.render_mods()
@@ -146,10 +124,16 @@ while true do
       end
 
     elseif action == "mods_apply" then
-      firstRun = false
+      -- короткая «ожидайте» плашка (на случай больших выборок)
+      view.open_loader("Применение фильтра…")
+      view.update_loader(1, 1, "")
+      view.render_loader()
       view.close_mods()
       view.draw_shell("&d[Панель ME-крафта]")
       reload_list()
+      draw_info_for(nil)
+      view.close_loader()
+      firstRun = false
     end
 
   elseif ev == "key_down" then
@@ -165,8 +149,8 @@ while true do
 
     elseif action == "dialog_ok" then
       local qty = tonumber(view.dialog.qty) or 1
-      local ok, err = model.request_craft(view.dialog.item, qty)
-      if ok then
+      local ok2, err = model.request_craft(view.dialog.item, qty)
+      if ok2 then
         say("§aЗапущен крафт: §e" .. tostring(view.dialog.item.label or "<?>") .. " §7x§b" .. tostring(qty))
       else
         say("§cОшибка запуска крафта: §7" .. tostring(err))
