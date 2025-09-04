@@ -1,4 +1,4 @@
--- /home/hausegames.lua  (обновлённое расположение и стили)
+-- /home/hausegames.lua — точная раскладка и стиль примера
 
 local event = require("event")
 local core  = require("ugui_core")
@@ -8,26 +8,25 @@ local boot  = require("gamesboot")
 core.init_screen(core.theme.bg, core.theme.text)
 local W,H = core.size()
 
--- сетка игр (как на скрине 3х2)
+-- сетка игр (3x2), карточки чуть выше под h=3 кнопки
 local rows, cols    = 2,3
-local cardW, cardH  = 26,11         -- повыше из-за крупной кнопки
-local padX, padY    = 6,4
-local gridX, gridY  = 4,6
+local cardW, cardH  = 26,11
+local padX, padY    = 8,6
+local gridX, gridY  = 3,6
 local gridW         = cols*cardW + (cols-1)*padX + 8
-local gridH         = rows*cardH + (rows-1)*padY + 6
+local gridH         = rows*cardH + (rows-1)*padY + 8
 
--- правая колонка
-local sidebarX      = gridX + gridW + 4
-local sidebarW      = math.max(30, W - sidebarX - 4)
+-- правая колонка как на примере
+local sidebarX      = gridX + gridW + 6
+local sidebarW      = math.max(36, W - sidebarX - 4)
 local sideTop       = gridY
-local sideGap       = 3
+local sideGap       = 4
 
 local function header()
   gui.drawMain("  HAUSEGAMES  ")
 end
 
 local function draw_grid_bg()
-  -- панель под карточки — другой фон, как в примере
   core.card_shadow(gridX-2, gridY-2, gridW, gridH, core.theme.gridBg, core.theme.border, core.theme.shadow2)
 end
 
@@ -41,7 +40,7 @@ local function draw_card(x,y,w,h, game)
   gui.text(x+2, y+3, "&7Создано: &f"..created)
   gui.text(x+2, y+4, "&7Сыграно: &f"..played)
 
-  -- крупная кнопка h=3 с тенью
+  -- крупная кнопка в стиле примера
   gui.button(x+2, y+h-4, w-4, 3, "  Запустить  ", {
     bg = core.theme.primary, fg = 0x000000,
     onClick = function() boot.run(name) end
@@ -55,8 +54,7 @@ local function draw_grid()
     for c=1,cols do
       local x = gridX + (c-1)*(cardW+padX)
       local y = gridY + (r-1)*(cardH+padY)
-      draw_card(x,y,cardW,cardH, list[idx])
-      idx = idx + 1
+      draw_card(x,y,cardW,cardH, list[idx]); idx = idx + 1
     end
   end
 end
@@ -78,26 +76,14 @@ local function restart_program()
   if _G.__hg_bot then pcall(_G.__hg_bot.stop, _G.__hg_bot) end
   core.clear()
   local f,err = loadfile("/home/hausegames.lua")
-  if not f then
-    gui.text(2, H-1, "&cОшибка загрузки: &f"..tostring(err))
-    core.flush()
-  else
-    f()
-  end
+  if not f then gui.text(2, H-1, "&cОшибка загрузки: &f"..tostring(err)); core.flush() else f() end
 end
 
 local function draw_footer()
   local y = H - 4
-  gui.button(4,  y, 26, 3, "  Рестарт программы  ", {
-    bg = core.theme.primary, fg = 0x000000, onClick = restart_program
-  })
-  gui.button(32, y, 26, 3, "  Выход из программы  ", {
-    bg = core.theme.danger,  fg = 0x000000,
-    onClick = function()
-      if _G.__hg_bot then pcall(_G.__hg_bot.stop, _G.__hg_bot) end
-      core.shutdown()
-    end
-  })
+  gui.button(4,  y, 28, 3, "  Рестарт программы  ", { bg = core.theme.primary, fg = 0x000000, onClick = restart_program })
+  gui.button(34, y, 28, 3, "  Выход из программы  ",  { bg = core.theme.danger,  fg = 0x000000,
+    onClick = function() if _G.__hg_bot then pcall(_G.__hg_bot.stop, _G.__hg_bot) end; core.shutdown() end })
 end
 
 local function render()
@@ -112,13 +98,12 @@ end
 
 render()
 
--- чат-команды (как было)
+-- чат-бот как был
 local Chat = require("chatcmd")
 local bot = Chat.new{ prefix="@", name="Оператор", admins={"HauseMasters"} }
 bot:start()
 _G.__hg_bot = bot
 
--- обработка кликов
 while true do
   local ev = {event.pull()}
   if ev[1] == "touch" then

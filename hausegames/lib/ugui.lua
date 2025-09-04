@@ -1,4 +1,4 @@
--- /lib/ugui.lua — адаптер к ugui_core с &-цветами и баннером
+-- /lib/ugui.lua — адаптер &-цветов + баннер и панели
 
 local Core     = require("ugui_core")
 local unicode  = require("unicode")
@@ -12,46 +12,28 @@ local palette = {
   ["c"]=0xFF5555, ["d"]=0xFF55FF, ["e"]=0xFFFF55, ["f"]=0xFFFFFF,
 }
 
-M.colors = { border="9", text="f", dim="7", primary="b", danger="c", warn="e", ok="a", shadow="0", card="8" }
+M.colors = { border="9", text="f", dim="7", primary="b", danger="c" }
 M.palette = palette
 M.theme   = Core.theme
 
--- печать строки с &-цветами
-function M.text(x, y, str)
+-- печать с &-цветами
+function M.text(x,y,str)
   if not str or str=="" then return end
   local ulen = unicode.len(str)
   local cx, i = x, 1
   local cur = M.theme.text
   while i <= ulen do
-    local ch = unicode.sub(str, i, i)
-    if ch == "&" and i < ulen then
-      local c = unicode.sub(str, i+1, i+1)
-      cur = palette[c] or cur
-      i = i + 2
+    local ch = unicode.sub(str,i,i)
+    if ch=="&" and i<ulen then
+      local c = unicode.sub(str,i+1,i+1); cur = palette[c] or cur; i=i+2
     else
-      Core.text(cx, y, ch, cur)
-      cx = cx + 1
-      i = i + 1
+      Core.text(cx,y,ch,cur); cx=cx+1; i=i+1
     end
   end
 end
 
--- верхний баннер
-function M.drawMain(title)
-  local w = select(1, require("component").gpu.getResolution())
-  local label = title or "HAUSEGAMES"
-  local bannerW = unicode.len(label) + 6
-  local x = math.max(2, math.floor((w - bannerW)/2))
-  local y = 1
-  -- “жёлтый” баннер и тень
-  Core.rect(x+2, y+1, bannerW, 3, 0x121316)
-  Core.rect(x,   y,   bannerW, 3, 0xE0B100)
-  Core.text(x+3, y+1, label, 0x000000)
-end
-
-function M.drawFrame(x,y,w,h,title)
-  Core.card_shadow(x,y,w,h, Core.theme.panelBg, Core.theme.border, Core.theme.shadow2, title)
-end
+function M.drawMain(title) Core.banner_center(title or "HAUSEGAMES") end
+function M.drawFrame(x,y,w,h,title) Core.card_shadow(x,y,w,h, Core.theme.panelBg, Core.theme.border, Core.theme.shadow2, title) end
 
 -- делегаты
 function M.clear(bg)                     Core.clear(bg or Core.theme.bg) end
@@ -64,13 +46,7 @@ function M.log(x,y,w,h,lines)            Core.logpane(x,y,w,h, lines or {}) end
 function M.inBounds(ctrl, cx, cy)        return Core.inBounds(ctrl, cx, cy) end
 function M.button(x,y,w,h,label,opts)
   opts = opts or {}
-  return Core.button(
-    x,y,w,h,
-    label or "OK",
-    opts.bg or Core.theme.primary,
-    opts.fg or 0x000000,
-    opts.onClick
-  )
+  return Core.button(x,y,w,h, label or "OK", opts.bg or Core.theme.primary, opts.fg or 0x000000, opts.onClick)
 end
 
 return M
