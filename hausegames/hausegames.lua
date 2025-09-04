@@ -13,8 +13,8 @@ local rows, cols    = 2,3
 local cardW, cardH  = 26,11
 local padX, padY    = 10,8
 
--- поле игр
-local gridX, gridY  = 3,6   -- чуть выше заголовка уменьшенного
+-- поле игр (компактная шапка => выше)
+local gridX, gridY  = 3,4
 local gridW         = cols*cardW + (cols-1)*padX + 10
 local gridH         = rows*cardH + (rows-1)*padY + 10
 
@@ -37,7 +37,7 @@ local function draw_card(x,y,w,h, g)
   gui.text(x+3, y+5, "&7Сыграно: &f"..played)
   gui.button(x+4, y+h-4, w-8, 3, "Запустить", {
     bg = core.theme.primary, fg = 0x000000,
-    parentBg = core.theme.card,   -- важно для красивых скруглений кнопки
+    parentBg = core.theme.card,   -- корректный фон для скруглений
     radius   = 2,
     onClick  = function() require("gamesboot").run(name) end
   })

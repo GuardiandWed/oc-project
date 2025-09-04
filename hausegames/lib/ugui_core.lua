@@ -1,4 +1,4 @@
--- /lib/ugui_core.lua — reactor/minecraft стиль (v3.2)
+-- /lib/ugui_core.lua — reactor/minecraft стиль (v3.4 tuned)
 
 local gpu     = require("component").gpu
 local unicode = require("unicode")
@@ -23,8 +23,8 @@ core.theme = {
   danger   = 0xFF7C8F,
 
   shadow1  = 0x25272A,   -- мягкая 1px внутр. тень
-  outline  = 0x0E0F11,   -- общий контур тёмный
-  dotChar  = "▪",        -- маленький «кубик» для точечной обводки
+  outline  = 0x1F2226,   -- менее контрастная обводка для «кубиков»
+  dotChar  = "·",        -- микро-кубик
 
   titleGray   = 0xD0D0D0,
   titleYellow = 0xF0B915,
@@ -118,24 +118,35 @@ local function cut_corners(x,y,w,h,parentBg,r)
   end
 end
 
-local function dotted_frame(x,y,w,h,col,step,char)
+-- пунктирная «кубическая» обводка
+-- cornersOnly=true -> ставим акцент по 3 точки в каждом углу, без сплошной линии
+local function dotted_frame(x,y,w,h,col,step,char,cornersOnly)
   if w<2 or h<2 then return end
-  step = step or 2; char = char or core.theme.dotChar
+  step = step or 2
+  char = char or core.theme.dotChar
   local prev = {gpu.getForeground()}
   gpu.setForeground(col or core.theme.outline)
 
-  for cx=x+1, x+w-2, step do
-    gpu.set(cx, y, char); gpu.set(cx, y+h-1, char)
-  end
-  for cy=y+1, y+h-2, step do
-    gpu.set(x, y+cy-y, char); gpu.set(x+w-1, y+cy-y, char)
+  if cornersOnly then
+    -- верхние углы
+    gpu.set(x+1, y, char); gpu.set(x+2, y, char); gpu.set(x+1, y+1, char)
+    gpu.set(x+w-2, y, char); gpu.set(x+w-3, y, char); gpu.set(x+w-2, y+1, char)
+    -- нижние углы
+    gpu.set(x+1, y+h-1, char); gpu.set(x+2, y+h-1, char); gpu.set(x+1, y+h-2, char)
+    gpu.set(x+w-2, y+h-1, char); gpu.set(x+w-3, y+h-1, char); gpu.set(x+w-2, y+h-2, char)
+  else
+    for cx=x+1, x+w-2, step do
+      gpu.set(cx, y, char); gpu.set(cx, y+h-1, char)
+    end
+    for cy=y+1, y+h-2, step do
+      gpu.set(x, y+cy-y, char); gpu.set(x+w-1, y+cy-y, char)
+    end
   end
 
   gpu.setForeground(table.unpack(prev))
 end
 
 -- карточки и панели ---------------------------------------------
--- правая панель: аккуратная внутренняя тень + тонкая синяя рамка
 function core.card_shadow(x,y,w,h,bg,border,_,title)
   inner_shadow(x,y,w,h)
   core.rect(x, y, w, h, bg or core.theme.panelBg)
@@ -143,22 +154,20 @@ function core.card_shadow(x,y,w,h,bg,border,_,title)
   if title and title~="" then core.text(x+2,y,"["..title.."]", core.theme.text) end
 end
 
--- карточка игры:
--- 1) подложка (plate) со скруглением r=2 и равными отступами
--- 2) внутренняя чёрная «вставка» (card) с точечной кубической обводкой
+-- карточка игры: подложка + внутренняя вставка (центр, лёгкое скругление)
 function core.card(x,y,w,h,title)
-  local r = 2
-  -- подложка
+  local rPlate, rInner = 2, 2              -- чуть круглее по просьбе
   inner_shadow(x,y,w,h)
   core.rect(x, y, w, h, core.theme.plate)
-  cut_corners(x,y,w,h, core.theme.gridBg, r)
+  cut_corners(x, y, w, h, core.theme.gridBg, rPlate)
 
-  -- внутренняя вставка по центру
-  local pad = 2
+  local pad = 4                             -- равный отступ -> вставка в центре
   local ix,iy,iw,ih = x+pad, y+pad, w-pad*2, h-pad*2
   core.rect(ix, iy, iw, ih, core.theme.card)
-  cut_corners(ix,iy,iw,ih, core.theme.plate, r)
-  dotted_frame(ix, iy, iw, ih, core.theme.outline, 2, core.theme.dotChar)
+  cut_corners(ix, iy, iw, ih, core.theme.plate, rInner)
+
+  -- «кубики» только в углах, чтобы не шумели как линии
+  dotted_frame(ix, iy, iw, ih, core.theme.outline, 2, core.theme.dotChar, true)
 
   if title and title~="" then core.text(ix+1,iy,"["..title.."]", core.theme.text) end
 end
@@ -175,7 +184,7 @@ function core.logpane(x,y,w,h,lines)
   end
 end
 
--- кнопка: яркое тело, пиксельные скругления r=2, точечная куб-обводка
+-- кнопка: округление r=2, микро-пунктир по периметру
 local function inside(mx,my,b) return mx>=b.x and mx<=b.x+b.w-1 and my>=b.y and my<=b.y+b.h-1 end
 function core.button(x,y,w,h,label,bg,fg,onClick, opts)
   h = math.max(3, h or 3)
@@ -187,9 +196,9 @@ function core.button(x,y,w,h,label,bg,fg,onClick, opts)
   inner_shadow(x,y,w,h)
   core.rect(x, y, w, h, bg)
   cut_corners(x,y,w,h, parentBg, r)
-  dotted_frame(x, y, w, h, core.theme.outline, 2, core.theme.dotChar)
+  dotted_frame(x, y, w, h, core.theme.outline, 2, core.theme.dotChar, false)
 
-  -- центрирование текста по Unicode
+  -- центрирование текста
   local lbl = tostring(label)
   local ulen = unicode.len(lbl)
   local maxw = math.max(0, w-2)
@@ -211,21 +220,21 @@ function core.dispatch_click(x,y)
   return false
 end
 
--- компактный заголовок (уменьшенный): шрифт 3×4, «щёчки» короче
-local FONT3 = {
-  ["A"]={" # ","# #","###","# #"},
-  ["E"]={"###","#  ","## ","###"},
-  ["H"]={"# #","###","# #","# #"},
-  ["M"]={"# #","###","# #","# #"},
-  ["O"]={"###","# #","# #","###"},
-  ["R"]={"## ","# #","## ","# #"},
-  ["S"]={" ##","#  ","  #","## "},
-  ["T"]={"###"," # "," # "," # "},
-  ["U"]={"# #","# #","# #","###"},
+-- компактный заголовок (как раньше, но ниже на экране)
+local FONT_MINI = {
+  A={" # ","# #","###"},
+  E={"###","#  ","###"},
+  H={"# #","###","# #"},
+  M={"# #","###","# #"},
+  O={"###","# #","###"},
+  R={"## ","###","# #"},
+  S={" ##","#  ","## "},
+  T={"###"," # "," # "},
+  U={"# #","# #","###"},
 }
-local function drawBig3(x,y,ch,col)
-  local pat = FONT3[ch] or {"###","###","###","###"}
-  for r=1,4 do
+local function drawMini(x,y,ch,col)
+  local pat = FONT_MINI[ch] or {"###","###","###"}
+  for r=1,3 do
     local row = pat[r]
     for c=1,#row do
       if row:sub(c,c) ~= " " then core.text(x+c-1, y+r-1, "█", col) end
@@ -236,23 +245,20 @@ end
 function core.bigtitle_center_small(text, splitN, colLeft, colRight, y)
   text   = (text or "HAUSEMASTERS"):upper()
   splitN = splitN or 5
-  local cw,gap = 3,1
+  local cw,gap = 3,0
   local totW   = #text*(cw+gap) - gap
   local scrW   = select(1, gpu.getResolution())
   local x0     = math.max(2, math.floor((scrW - totW)/2))
   local yy     = (y or 1)
 
-  -- уменьшенные «щёчки» (~в 2 раза)
-  core.rect(x0-6,       yy+1, 4, 1, core.theme.titleCheek)
-  core.rect(x0-5,       yy+2, 3, 1, core.theme.titleCheek)
-  core.rect(x0+totW+1,  yy+1, 4, 1, core.theme.titleCheek)
-  core.rect(x0+totW+1,  yy+2, 3, 1, core.theme.titleCheek)
+  core.rect(x0-4,      yy+1, 2, 1, core.theme.titleCheek)
+  core.rect(x0+totW+1, yy+1, 2, 1, core.theme.titleCheek)
 
   for i=1,#text do
     local ch  = text:sub(i,i)
     local col = (i<=splitN) and (colLeft or core.theme.titleGray)
                              or (colRight or core.theme.titleYellow)
-    drawBig3(x0 + (i-1)*(cw+gap), yy, ch, col)
+    drawMini(x0 + (i-1)*(cw+gap), yy, ch, col)
   end
 end
 
