@@ -21,6 +21,17 @@ end
 
 view.draw_shell("&d[Панель ME-крафта]")
 
+local Chat = require("chatcmd")
+
+-- создаём чат-обработчик
+local bot = Chat.new{
+  prefix = "@",
+  name   = "Оператор",
+  admins = {"HauseMasters"} -- твой ник
+}
+
+bot:start()
+
 -- быстрый кеш модов (1 запрос ко всей сети)
 model.rebuild_cache()
 view.set_mods(model.get_all_mods())
