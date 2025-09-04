@@ -1,35 +1,35 @@
--- /lib/ugui_core.lua — exact reactor-style
+-- /lib/ugui_core.lua — reactor/minecraft стиль (v3)
 
 local gpu = require("component").gpu
 local core = {}
 
 -- палитра
 core.theme = {
-  -- фон окна и большие области
-  bg            = 0x343434, -- очень тёмно-серый
-  gridBg        = 0xB5B5B5, -- светло-серый внутри большого поля с играми
-  gridEdgeDark  = 0x6A6A6A, -- внешний слой «толстой» рамки
-  gridEdgeLight = 0x8E8E8E, -- внутренний слой «толстой» рамки
+  -- фоны
+  bg            = 0x343434,  -- общий тёмно-серый
+  gridBg        = 0xB5B5B5,  -- светло-серый внутри большого поля
+  gridEdgeDark  = 0x6A6A6A,  -- внешний слой толстой рамки (1px)
+  gridEdgeLight = 0x8E8E8E,  -- внутренний слой толстой рамки (1px)
 
   -- карточки/панели/текст
-  card     = 0x151719,      -- почти чёрные карточки игр
-  panelBg  = 0x2E3033,      -- правые панели
+  card     = 0x151719,
+  panelBg  = 0x2E3033,
   text     = 0xE8EBEF,
   muted    = 0xBFC4CA,
 
   -- акценты
-  border   = 0x6D77FF,      -- тонкая синяя рамка для малых панелей
-  primary  = 0x12D4C6,      -- бирюзовая кнопка
-  danger   = 0xFF7C8F,      -- розово-красная
+  border   = 0x6D77FF,       -- тонкая синяя рамка для малых панелей
+  primary  = 0x12D4C6,
+  danger   = 0xFF7C8F,
 
   -- тени/контуры
-  shadow1  = 0x25272A,      -- мягкая 1px тень
-  outline  = 0x0E0F11,
+  shadow1  = 0x25272A,       -- мягкая 1px тень
+  outline  = 0x0E0F11,       -- контур кнопки
 
   -- заголовок
   titleGray   = 0xD0D0D0,
   titleYellow = 0xF0B915,
-  titleCheek  = 0x8E8E8E,   -- серые «щёчки» под заголовком
+  titleCheek  = 0x8E8E8E,    -- «щёчки» под заголовком
 }
 
 local W,H = 80,25
@@ -54,17 +54,16 @@ end
 function core.flush() end
 core.present = core.flush
 
--- базовые примитивы ---------------------------------------------
+-- примитивы -----------------------------------------------------
 local function setfg(c) if c then gpu.setForeground(c) end end
 local function setbg(c) if c then gpu.setBackground(c) end end
-
 function core.text(x,y,s,fg) setfg(fg); gpu.set(x,y,s or "") end
 function core.rect(x,y,w,h,bg,fg,char)
   setbg(bg); if fg then gpu.setForeground(fg) end
   for i=0,h-1 do gpu.fill(x, y+i, w, 1, char or " ") end
 end
 
--- тонкая скруглённая рамка (для малых панелей/шкал)
+-- тонкая рамка (для карточек/панелей)
 function core.frame(x,y,w,h,col)
   local prev = {gpu.getForeground()}
   gpu.setForeground(col or core.theme.border)
@@ -79,21 +78,27 @@ function core.frame(x,y,w,h,col)
   gpu.setForeground(table.unpack(prev))
 end
 
--- ТОЛСТАЯ «квадратная» рамка под большую область игр (два слоя)
+-- большой квадратный двухцветный фрейм (2 слоя по 1px) + фон
 function core.big_grid_frame(x,y,w,h)
   -- внешний слой
-  core.rect(x, y, w, h, core.theme.gridEdgeDark)
+  core.rect(x,   y,   w,   1, core.theme.gridEdgeDark)
+  core.rect(x,   y+h-1, w, 1, core.theme.gridEdgeDark)
+  core.rect(x,   y,   1,   h, core.theme.gridEdgeDark)
+  core.rect(x+w-1,y,  1,   h, core.theme.gridEdgeDark)
   -- внутренний слой
-  core.rect(x+2, y+2, w-4, h-4, core.theme.gridEdgeLight)
-  -- собственно светлый фон
-  core.rect(x+4, y+4, w-8, h-8, core.theme.gridBg)
+  core.rect(x+1, y+1, w-2, 1, core.theme.gridEdgeLight)
+  core.rect(x+1, y+h-2, w-2,1, core.theme.gridEdgeLight)
+  core.rect(x+1, y+1, 1,   h-2, core.theme.gridEdgeLight)
+  core.rect(x+w-2,y+1,1,   h-2, core.theme.gridEdgeLight)
+  -- заливка
+  core.rect(x+2, y+2, w-4, h-4, core.theme.gridBg)
 end
 
--- карточки и панели (без грязных теней — только 1px)
+-- карточки/панели с мягкой 1px тенью
 function core.card_shadow(x,y,w,h,bg,border,_,title)
-  core.rect(x+1,y+1,w,h, core.theme.shadow1)           -- 1px тень
-  core.rect(x,y,w,h, bg or core.theme.card)            -- тело
-  core.frame(x,y,w,h, border or core.theme.border)     -- тонкая рамка
+  core.rect(x+1,y+1,w,h, core.theme.shadow1)
+  core.rect(x,  y,  w,h, bg or core.theme.card)
+  core.frame(x,y,w,h, border or core.theme.border)
   if title and title~="" then core.text(x+2,y,"["..title.."]", core.theme.text) end
 end
 function core.card(x,y,w,h,title) core.card_shadow(x,y,w,h, core.theme.card, core.theme.border, nil, title) end
@@ -104,21 +109,21 @@ function core.logpane(x,y,w,h,lines)
   local start = math.max(1, #lines - maxLines + 1)
   local cy = y+1
   for i=start,#lines do
-    local s = tostring(lines[i]); if #s>w-2 then s=s:sub(1,w-5).."..." end
+    local s=tostring(lines[i]); if #s>w-2 then s=s:sub(1,w-5).."..." end
     core.text(x+1, cy, s, core.theme.muted); cy = cy + 1
   end
 end
 
--- крупные кнопки-«пилюли» (майнкрафт-скругления — срез пикселя)
+-- кнопки-«пилюли» (майнкрафт-скругления + совпадающий контур)
 local function inside(mx,my,b) return mx>=b.x and mx<=b.x+b.w-1 and my>=b.y and my<=b.y+b.h-1 end
 function core.button(x,y,w,h,label,bg,fg,onClick)
   h = math.max(3, h or 3)
   label = label or "OK"; bg = bg or core.theme.primary; fg = fg or 0x000000
 
-  core.rect(x+1, y+1, w, h, core.theme.shadow1)   -- 1px тень
-  core.rect(x,   y,   w, h, bg)                   -- тело
+  core.rect(x+1, y+1, w, h, core.theme.shadow1)  -- 1px тень
+  core.rect(x,   y,   w, h, bg)                  -- тело
 
-  -- «пиксельное скругление»: глушим углы
+  -- «пиксельные» скругления: срезаем углы
   if w>=4 then
     setbg(bg)
     gpu.fill(x,     y,     1, 1, " ")
@@ -126,11 +131,16 @@ function core.button(x,y,w,h,label,bg,fg,onClick)
     gpu.fill(x,     y+h-1, 1, 1, " ")
     gpu.fill(x+w-1, y+h-1, 1, 1, " ")
   end
-  core.frame(x, y, w, h, core.theme.outline)      -- тонкий контур
 
-  local tx = x + math.floor((w - #label)/2)
+  -- контур (совпадает с краями тела)
+  core.frame(x, y, w, h, core.theme.outline)
+
+  -- текст по центру + усечение, чтобы не вылезал
+  local lbl = label
+  if #lbl > w-2 then lbl = lbl:sub(1, w-2) end
+  local tx = x + math.floor((w - #lbl)/2)
   local ty = y + math.floor(h/2)
-  core.text(tx, ty, label, fg)
+  core.text(tx, ty, lbl, fg)
 
   local b = {x=x,y=y,w=w,h=h,onClick=onClick}; table.insert(buttons,b); return b
 end
@@ -140,50 +150,48 @@ function core.dispatch_click(x,y)
   return false
 end
 
--- БОЛЬШОЙ «пиксельный» заголовок без подложки (HOUSE/MASTERS)
--- Мини-шрифт 5×5 для нужных букв
-local FONT = {
-  ["A"]={"  #  "," # # ","#####","#   #","#   #"},
-  ["E"]={"#####","#    ","#### ","#    ","#####"},
-  ["H"]={"#   #","#   #","#####","#   #","#   #"},
-  ["M"]={"#   #","## ##","# # #","#   #","#   #"},
-  ["O"]={" ### ","#   #","#   #","#   #"," ### "},
-  ["R"]={"#### ","#   #","#### ","#  # ","#   #"},
-  ["S"]={" ####","#    "," ### ","    #","#### "},
-  ["T"]={"#####","  #  ","  #  ","  #  ","  #  "},
-  ["U"]={"#   #","#   #","#   #","#   #"," ### "},
+-- компактный «пиксельный» заголовок 4×5, без подложки
+local FONT4 = {
+  ["A"]={" ## ","#  #","####","#  #","#  #"},
+  ["E"]={"####","#   ","### ","#   ","####"},
+  ["H"]={"#  #","#  #","####","#  #","#  #"},
+  ["M"]={"#  #","## #","# ##","#  #","#  #"},
+  ["O"]={" ## ","#  #","#  #","#  #"," ## "},
+  ["R"]={"### ","#  #","### ","# # ","#  #"},
+  ["S"]={" ###","#   "," ## ","   #","### "},
+  ["T"]={"####","  # ","  # ","  # ","  # "},
+  ["U"]={"#  #","#  #","#  #","#  #"," ## "},
 }
-local function drawBigChar(x,y,ch,col)
-  local pat = FONT[ch] or {"#####","#####","#####","#####","#####" }
+local function drawBig4(x,y,ch,col)
+  local pat = FONT4[ch] or {"####","####","####","####","####"}
   for r=1,5 do
     local row = pat[r]
     for c=1,#row do
-      if row:sub(c,c) ~= " " then
-        core.text(x+c-1, y+r-1, "█", col)
-      end
+      if row:sub(c,c) ~= " " then core.text(x+c-1, y+r-1, "█", col) end
     end
   end
 end
 
 function core.bigtitle_center(text, splitN, colLeft, colRight, y)
-  text   = (text or "HOUSEMASTERS"):upper()
+  text   = (text or "HAUSEMASTERS"):upper()
   splitN = splitN or 5
-  local cw, gap = 5, 1
-  local totW = #text*(cw+gap) - gap
-  local scrW = select(1, gpu.getResolution())
-  local x0   = math.max(2, math.floor((scrW - totW)/2))
-  local yy   = (y or 1)
+  local cw,gap = 4,1
+  local totW   = #text*(cw+gap) - gap
+  local scrW   = select(1, gpu.getResolution())
+  local x0     = math.max(2, math.floor((scrW - totW)/2))
+  local yy     = (y or 1)
 
-  -- серые «щёчки» под заголовком
-  core.rect(x0-22, yy+3, 20, 1, core.theme.titleCheek)
-  core.rect(x0-16, yy+4, 16, 1, core.theme.titleCheek)
-  core.rect(x0+totW+2, yy+3, 20, 1, core.theme.titleCheek)
-  core.rect(x0+totW+2, yy+4, 16, 1, core.theme.titleCheek)
+  -- маленькие «щёчки» (ступеньки) слева/справа
+  core.rect(x0-10, yy+2, 8, 1, core.theme.titleCheek)
+  core.rect(x0-8,  yy+3, 6, 1, core.theme.titleCheek)
+  core.rect(x0+totW+2, yy+2, 8, 1, core.theme.titleCheek)
+  core.rect(x0+totW+2, yy+3, 6, 1, core.theme.titleCheek)
 
   for i=1,#text do
-    local ch = text:sub(i,i)
-    local col = (i<=splitN) and (colLeft or core.theme.titleGray) or (colRight or core.theme.titleYellow)
-    drawBigChar(x0 + (i-1)*(cw+gap), yy, ch, col)
+    local ch  = text:sub(i,i)
+    local col = (i<=splitN) and (colLeft or core.theme.titleGray)
+                             or (colRight or core.theme.titleYellow)
+    drawBig4(x0 + (i-1)*(cw+gap), yy, ch, col)
   end
 end
 

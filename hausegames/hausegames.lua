@@ -1,4 +1,4 @@
--- /home/hausegames.lua — раскладка «как на примере»
+-- /home/hausegames.lua — подгонка размеров/отступов
 
 local event = require("event")
 local core  = require("ugui_core")
@@ -12,39 +12,32 @@ local W,H = core.size()
 local rows, cols    = 2,3
 local cardW, cardH  = 26,11
 local padX, padY    = 10,8
-local gridX, gridY  = 3,8  -- чуть ниже, чтобы рамка «шла под» заголовком
-local gridW         = cols*cardW + (cols-1)*padX + 16
-local gridH         = rows*cardH + (rows-1)*padY + 16
 
--- правая колонка
-local sidebarX      = gridX + gridW + 8
-local sidebarW      = math.max(36, W - sidebarX - 4)
+-- поле с играми компактнее (рамка по 1px ×2, внутренние поля уменьшены)
+local gridX, gridY  = 3,7     -- ниже, чтобы рамка шла «под» заголовком
+local gridW         = cols*cardW + (cols-1)*padX + 10
+local gridH         = rows*cardH + (rows-1)*padY + 10
+
+-- правая колонка ближе к центру (сдвиг влево)
+local sidebarX      = gridX + gridW + 4
+local sidebarW      = math.max(36, W - sidebarX - 3)
 local sideTop       = gridY
 local sideGap       = 4
 
-local function header()
-  -- HOUSE[серый] + MASTERS[жёлтый], без подложки, с «щёчками»
-  gui.drawMain(5)
-end
+local function header() gui.drawMain() end
+local function draw_grid_bg() gui.bigGrid(gridX-2, gridY-2, gridW, gridH) end
 
-local function draw_grid_bg()
-  -- толстая квадратная рамка + светло-серый фон
-  gui.bigGrid(gridX-2, gridY-2, gridW, gridH)
-end
-
-local function draw_card(x,y,w,h, game)
+local function draw_card(x,y,w,h, g)
   gui.card(x,y,w,h)
-  local name    = game and game.name or "Пусто"
-  local created = game and game.created or "--"
-  local played  = game and game.played_h or "--"
-
+  local name    = g and g.name or "Пусто"
+  local created = g and g.created or "--"
+  local played  = g and g.played_h or "--"
   gui.text(x+2, y+1, "&f"..name)
   gui.text(x+2, y+3, "&7Создано: &f"..created)
   gui.text(x+2, y+4, "&7Сыграно: &f"..played)
-
   gui.button(x+3, y+h-4, w-6, 3, "  Запустить  ", {
     bg = core.theme.primary, fg = 0x000000,
-    onClick = function() boot.run(name) end
+    onClick = function() require("gamesboot").run(name) end
   })
 end
 
