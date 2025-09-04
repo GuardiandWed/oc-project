@@ -119,26 +119,52 @@ local function buildCaches()
   table.sort(modsArr)
   log("Найдено модов: "..tostring(#modsArr), COL_OK)
 
-  -- 2) Все крафтабельные шаблоны
+    -- 2) Все крафтабельные шаблоны (через список предметов, без лимита 50)
   writeStatus("Загрузка всех крафтов из ME…", COL_TEXT); tickSpinner()
-  local ok2, raw = pcall(function() return ME and ME.getCraftables() or {} end)
-  if not ok2 or type(raw)~="table" then raw = {} end
-  local total2 = #raw
-  for i=1,total2 do
-    local entry = raw[i]
+
+  local craftableList = {}
+  -- пройдём по всем предметам в сети и выберем только крафтабельные
+  for i = 1, total1 do
+    local it = items[i] or {}
+    if it.isCraftable or it.is_craftable then
+      craftableList[#craftableList+1] = {name = it.name, damage = it.damage}
+    end
+    if (i%300)==0 or i==total1 then
+      progressBar(X+2, Y+7, W-4, (total1==0 and 1 or i/total1))
+      text(X+2, Y+8, ("Progress: %d%%  Scan items…"):format(total1==0 and 100 or math.floor(i*100/total1)), COL_DIM)
+      tickSpinner()
+    end
+  end
+
+  local total2 = #craftableList
+  for i = 1, total2 do
+    local f = craftableList[i]
+    -- получаем «entry» для запроса крафта по имени/дамагe
+    local okE, entries = pcall(function() return ME.getCraftables({ name=f.name, damage=f.damage }) end)
+    local entry = (okE and type(entries)=="table") and entries[1] or nil
+
+    -- вытянем stack для label/mod (аккуратно, метод бывает тонкий)
     local st = {}
-    local okS, stack = pcall(function() return entry and entry.getItemStack(entry) end)
-    if okS and type(stack)=="table" then st=stack end
+    if entry and entry.getItemStack then
+      local okS, stack = pcall(entry.getItemStack, entry)
+      if okS and type(stack)=="table" then st = stack end
+    end
+    -- если не получилось через entry, используем данные из сети
+    st.name   = st.name   or f.name
+    st.damage = st.damage or f.damage
+    st.label  = st.label  or st.name or "<?>"
+
     local name = st.name
-    local label = st.label or name or "<?>"
+    local label = st.label
     local dmg   = st.damage
     local mod   = "unknown"
     if type(name)=="string" then
-      local p = name:find(":"); if p and p>1 then mod=name:sub(1,p-1) end
+      local p = name:find(":"); if p and p>1 then mod = name:sub(1,p-1) end
     end
+
     local row = { entry=entry, label=label, name=name, damage=dmg, mod=mod }
     craftCache.rows[#craftCache.rows+1] = row
-    local bucket = craftCache.byMod[mod]; if not bucket then bucket={}; craftCache.byMod[mod]=bucket end
+    local bucket = craftCache.byMod[mod]; if not bucket then bucket={} ; craftCache.byMod[mod]=bucket end
     bucket[#bucket+1] = row
 
     if (i%50)==0 or i==total2 then
@@ -150,6 +176,7 @@ local function buildCaches()
   end
   craftCache.built = true
   log("Готово. Всего крафтов: "..tostring(#craftCache.rows), COL_OK)
+
 
   return modsArr, craftCache
 end
