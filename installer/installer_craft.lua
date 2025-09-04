@@ -10,12 +10,12 @@ local REPOSITORY = "https://raw.githubusercontent.com/GuardiandWed/oc-project/re
 
 -- Если manifest.txt в репозитории отсутствует, используем этот дефолтный список:
 local DEFAULT_FILES = {
-  "main.lua",
-  "lib/craft_gui.lua",
-  "lib/craft_model.lua",
+  "hausegames.lua",
+  "lib/gamesboot.lua",
   "lib/ugui.lua",
   "lib/ugui_core.lua",
-  "lib/craft_boot.lua",
+  "games/games_list.lua",
+  "data/boot_log.txt"
 }
 
 local APP_TITLE   = "OCFS — Installer"
