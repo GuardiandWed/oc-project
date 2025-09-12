@@ -3,6 +3,7 @@
 
 ------------------------------------ CONFIG ------------------------------------
 local REPOSITORY = "https://raw.githubusercontent.com/GuardiandWed/oc-project/refs/heads/main/hausegames/"
+-- Если manifest.txt в репозитории отсутствует, используем этот дефолтный список:
 local DEFAULT_FILES = {
   "hausegames.lua",
   "lib/gamesboot.lua",
@@ -15,6 +16,8 @@ local DEFAULT_FILES = {
   "lib/color.lua",
   "images/reactorGUI_white.pic",
   "images/reactorGUI.pic",
+  "lib/OCIF.lua",
+  "lib/advancedLua.lua",
 } 
 
 

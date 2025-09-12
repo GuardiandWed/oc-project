@@ -19,6 +19,8 @@ local DEFAULT_FILES = {
   "lib/color.lua",
   "images/reactorGUI_white.pic",
   "images/reactorGUI.pic",
+  "lib/OCIF.lua",
+  "lib/advancedLua.lua",
 } 
 
 
