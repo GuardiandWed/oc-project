@@ -15,7 +15,7 @@ local DEFAULT_FILES = {
   "data/boot_log.txt",
   "lib/chatcmd.lua",
 }
-}
+
 
 local APP_TITLE   = "HauseGames — Installer"
 local REBOOT_AFTER = false   -- при желании можно включить авт ребут
