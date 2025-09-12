@@ -17,6 +17,8 @@ local DEFAULT_FILES = {
   "lib/doubleBuffering.lua",
   "lib/image.lua",
   "lib/color.lua",
+  "images/reactorGUI_white.pic",
+  "images/reactorGUI.pic",
 } 
 
 
