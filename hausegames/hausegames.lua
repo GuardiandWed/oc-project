@@ -1,302 +1,317 @@
--- /home/hausegames.lua — Меню игр в стиле «как у друга»
-local fs       = require("filesystem")
-local unicode  = require("unicode")
-local rcui     = require("rcui")
+-- /home/hausegames.lua — Меню игр «HauseGames»
+local fs        = require("filesystem")
+local unicode   = require("unicode")
+local rcui      = require("rcui")
+local buffer    = require("doubleBuffering")
+local serial    = require("serialization")
 
--- настройка темы и фонов (поставь свои .pic если есть)
+-- ---------- ИНИЦ ----------
 rcui.init{
   w = 160, h = 50,
   theme  = "dark",
   bgDark = "/home/images/reactorGUI.pic",
   bgLight= "/home/images/reactorGUI_white.pic",
 }
+local C = rcui.colors()
+local W, H = 160, 50
 
--- ============================================================================
+-- ---------- УТИЛЫ ----------
+local function clamp(v,a,b) if v<a then return a elseif v>b then return b else return v end end
 
--- где лежат игры (любой из вариантов)
-local GAME_DIRS = { "/home/games", "/usr/games", "/games" }
+-- округлённый прямоугольник (радиус 1 символ)
+local function roundedRect(x,y,w,h, col, bg)
+  buffer.drawRectangle(x,y,w,h, col, 0, " ")
+  bg = bg or C().bg
+  -- «срезаем» 4 угла
+  buffer.drawRectangle(x,       y,        1,1, bg,0," ")
+  buffer.drawRectangle(x+w-1,   y,        1,1, bg,0," ")
+  buffer.drawRectangle(x,       y+h-1,    1,1, bg,0," ")
+  buffer.drawRectangle(x+w-1,   y+h-1,    1,1, bg,0," ")
+end
 
--- что считаем «игрой»
-local ENTRY_FILES = { "main.lua", "run.lua", "game.lua" }
+local function shadowRoundedRect(x,y,w,h, body, shadow)
+  buffer.drawRectangle(x+2,y+2,w,h, shadow or C().shadow, 0, " ")
+  roundedRect(x,y,w,h, body or C().bgPane, C().bg)
+end
 
--- простая БД «сыграно» (можешь заменить на свою)
-local DATA_DIR   = "/home/data"
-local STATS_FILE = DATA_DIR .. "/games_stats.lua"
+local function centerX(x,w,str)
+  return x + math.max(0, math.floor((w - unicode.len(str or ""))/2))
+end
 
-local state = {
-  games = {},          -- { {id,title,path,created,played= "MM:SS", sessions=0}, ... }
-  selection = nil,     -- индекс выбранной игры
-  page = 1,
-  perPage = 6,
-  sortMode = "az",     -- "az" | "date"
-}
-
--- ===== утилиты даты/времени ==================================================
-local function fmtDate(ts)
-  if not ts then return "--" end
-  local d = math.floor(ts/86400000)  -- OC возвращает ms от эпохи (обычно)
-  local s = os.date("*t", math.floor(ts/1000))
-  if s then
-    return string.format("%04d-%02d-%02d", s.year, s.month, s.day)
-  else
-    return tostring(ts)
-  end
+local function drawTitle()
+  -- перекрываем жёлтую надпись на фоне и рисуем свою
+  buffer.drawRectangle(4, 2, W-8, 3, 0x5A5A5A, 0, " ")
+  local title = "HauseGames"
+  buffer.drawText(centerX(4, W-8, title), 3, 0xFFD166, title) -- тёплый жёлтый
+  -- маленькая голубая подпись как «версия/подзаголовок»
+  local sub = "HauseMasters"
+  buffer.drawText(centerX(4, W-8, sub), 4, C().accent, sub)
 end
 
 local function fmtPlayed(sec)
-  if not sec then return "--:--" end
+  sec = tonumber(sec or 0) or 0
   local m = math.floor(sec/60)
   local s = math.floor(sec%60)
   return string.format("%02d:%02d", m, s)
 end
 
--- ===== загрузка/сохранение статистики =======================================
-local function loadStats()
-  local ok, data = pcall(dofile, STATS_FILE)
-  if ok and type(data)=="table" then return data end
-  return {}
+-- ---------- ЧТЕНИЕ ИГР ИЗ JSON ----------
+local GAMES_DIR = "/home/games"
+
+local function readFile(path)
+  local f = io.open(path,"rb"); if not f then return nil end
+  local d = f:read("*a"); f:close(); return d
 end
 
-local function saveStats(tbl)
-  fs.makeDirectory(DATA_DIR)
-  local f = io.open(STATS_FILE, "wb")
-  if not f then return end
-  f:write("return " .. require("serialization").serialize(tbl))
-  f:close()
-end
-
-local stats = loadStats()
-
--- ===== поиск игр на диске ====================================================
-local function isGamePath(path)
-  if fs.isDirectory(path) then
-    for _,f in ipairs(ENTRY_FILES) do
-      if fs.exists(fs.concat(path, f)) then return true end
-    end
-  else
-    -- одиночный .lua в корне каталога игр тоже считаем игрой
-    if path:match("%.lua$") then return true end
-  end
-  return false
-end
-
-local function scanGames()
+-- очень простой парсер массива объектов с полями name, created, played_seconds
+local function parseGamesJSON(s)
   local res = {}
-  for _,root in ipairs(GAME_DIRS) do
-    if fs.exists(root) then
-      for item in fs.list(root) do
-        local p = fs.concat(root, item)
-        if isGamePath(p) then
-          local id = (item:gsub("%.lua$",""))
-          local title = id
-          local created = fs.lastModified(p) or os.time()*1000
-          local st = stats[id] or {}
-          table.insert(res, {
-            id = id,
-            title = title,
-            path = p,
-            created = created,
-            played = st.played or 0,
-            sessions = st.sessions or 0,
-          })
-        end
+  -- сначала попытка через доступную json-библиотеку, если такая есть
+  local ok, json = pcall(require, "json")
+  if ok and json and json.decode then
+    local t = json.decode(s)
+    if type(t)=="table" then
+      for _,v in ipairs(t) do
+        table.insert(res, {
+          title   = v.name or "Game",
+          created = v.created or "--",
+          played  = fmtPlayed(v.played_seconds or 0),
+        })
+      end
+      return res
+    end
+  end
+  -- fallback: извлекаем объекты регуляркой (для твоего формата достаточно)
+  for name, created, played in s:gmatch('{%s*"name"%s*:%s*"([^"]+)"%s*,%s*"created"%s*:%s*"([^"]+)"%s*,%s*"played_seconds"%s*:%s*(%d+)%s*}') do
+    table.insert(res, { title=name, created=created, played=fmtPlayed(played) })
+  end
+  return res
+end
+
+local function loadGames()
+  local list = {}
+
+  if fs.exists(GAMES_DIR) and fs.isDirectory(GAMES_DIR) then
+    local target = fs.concat(GAMES_DIR, "games.json")
+    if not fs.exists(target) then
+      -- берём первый .json в папке, если games.json нет
+      for f in fs.list(GAMES_DIR) do
+        if f:match("%.json$") then target = fs.concat(GAMES_DIR, f); break end
+      end
+    end
+    if target and fs.exists(target) then
+      local s = readFile(target)
+      if s then
+        local parsed = parseGamesJSON(s)
+        for _,g in ipairs(parsed) do table.insert(list, g) end
       end
     end
   end
 
-  -- запасной список, если папки пустые
-  if #res == 0 then
-    res = {
-      {id="snake",    title="Snake",    path="/home/games/snake",    created=os.time()*1000-86400*11*1000, played=0,    sessions=0},
-      {id="tetris",   title="Tetris",   path="/home/games/tetris",   created=os.time()*1000-86400*18*1000, played=134,  sessions=4},
-      {id="2048",     title="2048",     path="/home/games/2048",     created=os.time()*1000-86400*21*1000, played=47,   sessions=2},
-      {id="pong",     title="Pong",     path="/home/games/pong",     created=os.time()*1000-86400*60*1000, played=65,   sessions=3},
-      {id="mines",    title="Mines",    path="/home/games/mines",    created=os.time()*1000-86400*80*1000, played=nil,  sessions=0},
-      {id="breakout", title="Breakout", path="/home/games/breakout", created=os.time()*1000-86400*95*1000, played=212,  sessions=6},
+  -- если ничего не нашли — вставим пример (на всякий)
+  if #list == 0 then
+    list = {
+      { title="Snake",    created="2025-08-31", played=fmtPlayed(0)    },
+      { title="Tetris",   created="2025-08-25", played=fmtPlayed(8040) },
+      { title="2048",     created="2025-08-12", played=fmtPlayed(2820) },
+      { title="Pong",     created="2025-07-08", played=fmtPlayed(3900) },
+      { title="Mines",    created="2025-06-21", played=fmtPlayed(0)    },
+      { title="Breakout", created="2025-06-01", played=fmtPlayed(12780)},
     }
   end
 
-  -- сортировка по текущему режиму
-  local mode = state.sortMode
-  table.sort(res, function(a,b)
-    if mode=="date" then
-      return (a.created or 0) > (b.created or 0)
-    else
-      return unicode.lower(a.title) < unicode.lower(b.title)
-    end
-  end)
-  state.games = res
-  if #state.games == 0 then state.selection = nil end
-  if state.page > math.max(1, math.ceil(#res/state.perPage)) then state.page = 1 end
+  -- максимум 6 (3×2), без пагинации
+  local trimmed = {}
+  for i=1, math.min(6, #list) do trimmed[i] = list[i] end
+  return trimmed
 end
 
--- ===== запуск игры ===========================================================
-local function runGame(g)
-  if not g then return end
-  local ok, boot = pcall(require, "gamesboot")
-  if ok and type(boot)=="table" then
-    rcui.log("Запуск: "..g.title)
-    local ok2, err = pcall(function()
-      if boot.run then
-        boot.run(g.id, g.path)
-      elseif boot.start then
-        boot.start(g.id, g.path)
-      else
-        error("gamesboot: нет функции run/start")
-      end
-    end)
-    if not ok2 then rcui.log("Ошибка запуска: "..tostring(err)) end
-  else
-    rcui.log("gamesboot не найден, путь: "..tostring(g.path))
+local games = loadGames()
+local selected = 1
+
+-- ---------- КАРТОЧКА ИГРЫ (rounded) ----------
+local function drawGameCard(x,y,w,h,g, onPlay, id)
+  shadowRoundedRect(x,y,w,h, C().bgPane, C().shadow)
+
+  -- левый цветной «градиент»
+  local barX = x+2
+  for i=0,h-6 do
+    local t = i / math.max(1,h-6)
+    local r = clamp(0x20 + math.floor(0x40*t), 0, 255)
+    local col = (0x00 << 16) + (r << 8) + 0xFF -- бирюзово-голубой
+    buffer.drawRectangle(barX, y+3+i, 2, 1, col, 0, " ")
   end
-  -- обновим статистику
-  stats[g.id] = stats[g.id] or {}
-  stats[g.id].sessions = (stats[g.id].sessions or 0) + 1
-  saveStats(stats)
+
+  -- текст: только имя, дата, сыграно
+  buffer.drawText(x+6, y+2, C().text, g.title or "Game")
+  buffer.drawText(x+6, y+4, C().sub,  "Создано:  "..(g.created or "--"))
+  buffer.drawText(x+6, y+6, C().sub,  "Сыграно:  "..(g.played or "--:--"))
+
+  -- кнопка «Играть» (rounded)
+  local btnW, btnH = w-14, 4
+  local bx = x + math.floor((w - btnW)/2)
+  local by = y + h - btnH - 2
+  shadowRoundedRect(bx, by, btnW, btnH, C().green, C().shadow)
+  buffer.drawText(centerX(bx, btnW, "Играть"), by + math.floor(btnH/2), 0x000000, "Играть")
+
+  -- клики
+  rcui.colors() -- no-op
+  rcui.panelBox(0,0,0,0) -- no-op для луа-линтера
+  rcui.run -- dummy keep
+  local function inRect(px,py, rx,ry,rw,rh) return px>=rx and px<=rx+rw-1 and py>=ry and py<=ry+rh-1 end
+  -- регистрируем клик на кнопку
+  rcui.colors -- noop
+  local addClick = function(x1,y1,x2,y2,cb) table.insert(debug, x1 or 0); end -- будет переопределено ниже через ui.addClick
 end
 
--- ===== действия UI ===========================================================
-local function selectByIndex(idx)
-  local g = state.games[idx]
-  if g then state.selection = idx end
+-- Перерисовщик кнопок снизу (2 ряда, rounded)
+local function drawBottomButtons(ui, actions)
+  -- 2 ряда по 3 кнопки
+  local rows, cols = 2, 3
+  local marginX, marginY = 4, 1
+  local areaW = W - 2*marginX
+  local areaH = 2*4 + marginY + 2         -- высота области под две полоски кнопок
+  local cellW = math.floor((areaW - (cols-1)*2)/cols)
+  local cellH = 4
+  local startY = H - areaH
+
+  local i = 1
+  for r=1,rows do
+    for c=1,cols do
+      if i > #actions then break end
+      local a = actions[i]
+      local x = marginX + (c-1)*(cellW+2)
+      local y = startY + (r-1)*(cellH+marginY)
+      shadowRoundedRect(x,y,cellW,cellH, a.color, C().shadow)
+      buffer.drawText(centerX(x,cellW,a.label), y+2, 0x000000, a.label)
+      ui.addClick(x,y,x+cellW-1,y+cellH-1, function() a.onClick() end, "btn"..i)
+      i = i + 1
+    end
+  end
 end
 
-local function selectedGame() return state.games[state.selection or 0] end
-
-local function nextPage(delta)
-  local pages = math.max(1, math.ceil(#state.games/state.perPage))
-  state.page = math.max(1, math.min(pages, state.page + delta))
-end
-
-local function toggleSort()
-  state.sortMode = (state.sortMode=="az") and "date" or "az"
-  scanGames()
-end
-
--- ============================================================================
-
-scanGames()
-
-local W, H = 160, 50
-local gridX, gridY = 4, 6
-local cardW, cardH = 40, 14
+-- ---------- ОСНОВНАЯ ОТРИСОВКА ----------
+local gridX, gridY = 4, 7
+local cardW, cardH = 44, 15
 local gapX, gapY   = 6, 5
 
-local rightX = gridX + 3*(cardW+gapX) + 4
-local rightW = W - rightX - 3
+-- правая колонка с нормальным отступом
+local rightMargin = 4
+local rightW = 42
+local rightX = W - rightW - rightMargin
 
-local bottomY = H - 5
-local btnH = 3
-local btnGap = 2
-local btnW = math.floor((W - 6 - btnGap*5)/5)
-
--- рисуем подчёркнутый заголовок по центру
-local function drawHeader(ui, text)
-  local x = math.floor(W/2 - unicode.len(text)/2)
-  ui.text(x, 2, text, rcui.colors().accent)
-end
-
--- рамка выделения карточки
-local function drawSelectionFrame(ui, x,y,w,h)
-  local col = rcui.colors().accent
-  ui.lineH(x, y, w, col)
-  ui.lineH(x, y+h-1, w, col)
-  ui.lineV(x, y, h, col)
-  ui.lineV(x+w-1, y, h, col)
-end
-
-local function gameLines(g)
-  return { "Создано:  "..fmtDate(g.created), "Сыграно:  "..fmtPlayed(g.played) }
-end
-
--- основной кадр
 local function render(ui)
-  drawHeader(ui, "HauseMasters")
+  drawTitle()
 
-  -- страничный вывод карточек
-  local from = (state.page-1)*state.perPage + 1
-  local to   = math.min(#state.games, from + state.perPage - 1)
-  local idx  = from
-  local frameOfSelected = nil
-
+  -- 3×2 карточки
+  local idx = 1
+  local selFrame = nil
   for row=0,1 do
     for col=0,2 do
-      if idx > to then break end
-      local g = state.games[idx]
+      if not games[idx] then break end
       local x = gridX + col*(cardW+gapX)
       local y = gridY + row*(cardH+gapY)
-      rcui.gameCard(x, y, cardW, cardH, {
-        title   = g.title,
-        lines   = gameLines(g),
-        button  = "Играть",
-        id      = idx,
-        onClick = function() state.selection = idx; runGame(g) end
-      })
-      if idx == state.selection then
-        frameOfSelected = {x=x,y=y,w=cardW,h=cardH}
+
+      -- карточка
+      shadowRoundedRect(x,y,cardW,cardH, C().bgPane, C().shadow)
+
+      -- левый бар
+      local barX = x+2
+      for i=0,cardH-6 do
+        local t = i / math.max(1,cardH-6)
+        local col = 0x138CFF + math.floor(t*0x004080)
+        buffer.drawRectangle(barX, y+3+i, 2, 1, clamp(col,0,0xFFFFFF), 0, " ")
       end
-      -- клик по «тело карточки» для выбора без запуска
-      rcui.colors() -- no-op, чтобы не ругался линтер
-      rcui.panelBox(0,0,0,0) -- no-op; вызов ради инлайна (без эффекта)
-      -- регистрация клика выбора
-      local function choose() selectByIndex(idx) end
-      -- прямоугольник всей карточки (минус кнопка) — зарегистрируем клик
-      -- имитируем область: верх  y .. y+cardH-4
-      local addClick = ui.addClick
-      addClick(x, y, x+cardW-1, y+cardH-4, function() choose() end, "select"..idx)
+
+      -- текст
+      local g = games[idx]
+      buffer.drawText(x+6, y+2, C().text, g.title)
+      buffer.drawText(x+6, y+4, C().sub,  "Создано:  "..g.created)
+      buffer.drawText(x+6, y+6, C().sub,  "Сыграно:  "..g.played)
+
+      -- кнопка «Играть»
+      local btnW, btnH = cardW-14, 4
+      local bx = x + math.floor((cardW - btnW)/2)
+      local by = y + cardH - btnH - 2
+      shadowRoundedRect(bx, by, btnW, btnH, C().green, C().shadow)
+      buffer.drawText(centerX(bx, btnW, "Играть"), by+2, 0x000000, "Играть")
+
+      -- клики: по карточке — выбрать; по кнопке — запуск
+      ui.addClick(x, y, x+cardW-1, by-1, function() selected = idx end, "select"..idx)
+      ui.addClick(bx, by, bx+btnW-1, by+btnH-1, function()
+        selected = idx
+        rcui.log("Запуск: "..g.title)
+        -- здесь можешь дернуть gamesboot.run(...)
+      end, "play"..idx)
+
+      if idx == selected then
+        -- подчёркнутая рамка выбора
+        ui.lineH(x, y, cardW, C().accent)
+        ui.lineH(x, y+cardH-1, cardW, C().accent)
+        ui.lineV(x, y, cardH, C().accent)
+        ui.lineV(x+cardW-1, y, cardH, C().accent)
+      end
 
       idx = idx + 1
     end
   end
 
-  if frameOfSelected then
-    drawSelectionFrame(ui, frameOfSelected.x, frameOfSelected.y, frameOfSelected.w, frameOfSelected.h)
-  end
-
-  -- правая колонка: информация по выбранной игре
-  rcui.panelBox(rightX, 5, rightW, 12, "Информация")
-  local gsel = selectedGame()
-  if gsel then
-    ui.text(rightX+2, 7,  "Игра:", rcui.colors().sub)
-    ui.text(rightX+9, 7,  gsel.title)
-    ui.text(rightX+2, 9,  "Создано:", rcui.colors().sub)
-    ui.text(rightX+12,9,  fmtDate(gsel.created))
-    ui.text(rightX+2, 11, "Сыграно:", rcui.colors().sub)
-    ui.text(rightX+12,11, fmtPlayed(gsel.played))
-    ui.text(rightX+2, 13, "Сессии:", rcui.colors().sub)
-    ui.text(rightX+12,13, tostring(gsel.sessions or 0))
+  -- правая колонка: панели БЕЗ скругления
+  rcui.panelBox(rightX, 6, rightW, 8, "Информация")
+  if games[selected] then
+    local g = games[selected]
+    ui.text(rightX+2, 8,  "Игра:", C().sub);      ui.text(rightX+9,  8,  g.title)
+    ui.text(rightX+2, 10, "Создано:", C().sub);   ui.text(rightX+12, 10, g.created)
+    ui.text(rightX+2, 12, "Сыграно:", C().sub);   ui.text(rightX+12, 12, g.played)
   else
-    ui.text(rightX+2, 7, "Выбери игру слева, чтобы увидеть детали", rcui.colors().accent)
+    ui.text(rightX+2, 8, "Выбери игру слева, чтобы увидеть детали", C().accent)
   end
 
-  rcui.drawMetricsPanel(rightX, 19, rightW, 4)
-  rcui.drawLogPanel(rightX, 24, rightW, 10)
+  rcui.drawMetricsPanel(rightX, 16, rightW, 4)
+  rcui.drawLogPanel(rightX, 21, rightW, 12)
 
-  -- нижние кнопки
-  local x0 = 3
-  rcui.button(x0, bottomY, btnW, btnH, "Обновить", "orange", function()
-    scanGames()
-    rcui.log("Список игр обновлён")
-  end)
-
-  rcui.button(x0+(btnW+btnGap), bottomY, btnW, btnH, "Сорт: "..(state.sortMode=="az" and "A→Z" or "Новые"), "gray", function()
-    toggleSort()
-    rcui.log("Сортировка: "..(state.sortMode=="az" and "A→Z" or "по дате"))
-  end)
-
-  rcui.button(x0+2*(btnW+btnGap), bottomY, btnW, btnH, "⟨ Стр", "gray", function() nextPage(-1) end)
-  rcui.button(x0+3*(btnW+btnGap), bottomY, btnW, btnH, "Стр ⟩", "gray", function() nextPage(1) end)
-
-  rcui.button(x0+4*(btnW+btnGap), bottomY, btnW, btnH, "Выход", "red", function() rcui.stop() end)
-
-  -- индикатор страницы
-  local pages = math.max(1, math.ceil(#state.games/state.perPage))
-  local pageStr = string.format("Страница %d / %d", state.page, pages)
-  ui.text( math.floor(W/2 - unicode.len(pageStr)/2), bottomY-1, pageStr, rcui.colors().sub)
+  -- нижние кнопки: 2 ряда × 3
+  local actions = {
+    { label="Обновить",        color=0xFFB84D, onClick=function()
+        games = loadGames(); rcui.log("Список игр обновлён")
+      end },
+    { label="Сорт A→Z / Новые", color=C().pane, onClick=function()
+        -- простая смена порядка: либо по названию, либо по дате-строке
+        local byDate = false
+        for i=1,#games-1 do
+          if games[i].created < games[i+1].created then byDate=true break end
+        end
+        if byDate then
+          table.sort(games, function(a,b) return unicode.lower(a.title) < unicode.lower(b.title) end)
+          rcui.log("Сортировка: A→Z")
+        else
+          table.sort(games, function(a,b) return a.created > b.created end)
+          rcui.log("Сортировка: по дате")
+        end
+      end },
+    { label="Тема",            color=C().accent, onClick=function()
+        -- просто переинициализируем другую тему, фоны сохраняем
+        local newTheme = (rcui.colors()==C and "light") or "light" -- no-op для линтера
+        local cur = (C()==nil and "dark") or "dark"
+        rcui.init{ w=W, h=H, theme = (C().bg==0xCFCFCF) and "dark" or "light",
+                   bgDark="/home/images/reactorGUI.pic", bgLight="/home/images/reactorGUI_white.pic" }
+      end },
+    { label="Играть выбранную", color=0x33CC66, onClick=function()
+        if games[selected] then rcui.log("Запуск: "..games[selected].title) end
+      end },
+    { label="Удалить из списка", color=0xE85C5C, onClick=function()
+        if games[selected] then
+          rcui.log("Игра скрыта: "..games[selected].title)
+          table.remove(games, selected); selected = math.max(1, math.min(selected, #games))
+        end
+      end },
+    { label="Выход",           color=0xFF8A65, onClick=function() rcui.stop() end },
+  }
+  drawBottomButtons(ui, actions)
 end
 
+-- ---------- ЗАПУСК ----------
 rcui.run(render)
 
--- финальная очистка
-local buffer = require("doubleBuffering")
+-- аккуратно очистим
 buffer.clear(0x000000); buffer.drawChanges(); require("term").clear()
