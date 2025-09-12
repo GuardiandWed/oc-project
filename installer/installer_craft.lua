@@ -15,6 +15,7 @@ local DEFAULT_FILES = {
   "data/boot_log.txt",
   "lib/chatcmd.lua",
   "lib/doubleBuffering.lua",
+  "lib/image.lua",
 } 
 
 
