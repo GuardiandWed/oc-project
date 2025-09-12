@@ -12,10 +12,9 @@ local REPOSITORY = "https://raw.githubusercontent.com/GuardiandWed/oc-project/re
 local DEFAULT_FILES = {
   "hausegames.lua",
   "lib/gamesboot.lua",
-  "lib/ugui.lua",
-  "lib/ugui_core.lua",
+  "lib/rcui.lua",
   "games/games_list.json",
-  "data/boot_log.txt"
+  "data/boot_log.txt",
   "lib/chatcmd.lua",
 }
 
