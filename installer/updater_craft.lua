@@ -3,7 +3,6 @@
 
 ------------------------------------ CONFIG ------------------------------------
 local REPOSITORY = "https://raw.githubusercontent.com/GuardiandWed/oc-project/refs/heads/main/hausegames/"
-
 local DEFAULT_FILES = {
   "hausegames.lua",
   "lib/gamesboot.lua",
@@ -13,6 +12,7 @@ local DEFAULT_FILES = {
   "lib/chatcmd.lua",
   "lib/doubleBuffering.lua",
   "lib/image.lua",
+  "lib/color.lua",
 } 
 
 local APP_TITLE = "HauseGames — Updater"

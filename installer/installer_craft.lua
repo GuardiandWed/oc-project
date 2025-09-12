@@ -16,6 +16,7 @@ local DEFAULT_FILES = {
   "lib/chatcmd.lua",
   "lib/doubleBuffering.lua",
   "lib/image.lua",
+  "lib/color.lua",
 } 
 
 
