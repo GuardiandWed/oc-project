@@ -11,7 +11,8 @@ local DEFAULT_FILES = {
   "games/games_list.json",
   "data/boot_log.txt",
   "lib/chatcmd.lua",
-}
+  "lib/doubleBuffering.lua"
+} 
 
 local APP_TITLE = "HauseGames — Updater"
 local REBOOT_AFTER = false
