@@ -4,8 +4,6 @@
 -- Он скачает всё из GitHub: ocfs/lib/** -> /lib/**, остальное -> в текущую папку.
 
 ------------------------------------ CONFIG ------------------------------------
--- URL должен указывать ИМЕННО на папку ocfs/ в raw:
--- Пример: "https://raw.githubusercontent.com/<user>/<repo>/refs/heads/main/ocfs/"
 local REPOSITORY = "https://raw.githubusercontent.com/GuardiandWed/oc-project/refs/heads/main/hausegames/"
 
 -- Если manifest.txt в репозитории отсутствует, используем этот дефолтный список:
@@ -16,6 +14,7 @@ local DEFAULT_FILES = {
   "games/games_list.json",
   "data/boot_log.txt",
   "lib/chatcmd.lua",
+}
 }
 
 local APP_TITLE   = "HauseGames — Installer"
