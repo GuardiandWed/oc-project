@@ -20,6 +20,8 @@ local DEFAULT_FILES = {
 } 
 
 
+
+
 local APP_TITLE   = "HauseGames — Installer"
 local REBOOT_AFTER = false   -- при желании можно включить авт ребут
 

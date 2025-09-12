@@ -13,7 +13,9 @@ local DEFAULT_FILES = {
   "lib/doubleBuffering.lua",
   "lib/image.lua",
   "lib/color.lua",
-} 
+}
+
+
 
 local APP_TITLE = "HauseGames — Updater"
 local REBOOT_AFTER = false
